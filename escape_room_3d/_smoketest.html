@@ -1,0 +1,2227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Escape Room 3D - 13 rooms, chained keys</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#0b0e14;font-family:system-ui,sans-serif}
+#app{position:fixed;inset:0}canvas{display:block}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:10}
+#crosshair{position:absolute;top:50%;left:50%;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;border-radius:50%;background:rgba(255,255,255,.9);box-shadow:0 0 3px rgba(0,0,0,.9)}
+#objective{position:absolute;top:14px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:#ffd75e;padding:8px 18px;border-radius:20px;font-size:14px;white-space:nowrap}
+#inventory{position:absolute;bottom:16px;left:16px;background:rgba(0,0,0,.6);color:#fff;padding:10px 14px;border-radius:10px;font-size:14px}
+#roomLabel{position:absolute;bottom:16px;right:16px;background:rgba(0,0,0,.6);color:#7df9ff;padding:10px 14px;border-radius:10px;font-size:14px}
+#hotbar{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:6px}
+.slot{width:52px;height:52px;background:rgba(0,0,0,.6);border:2px solid rgba(255,255,255,.22);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;position:relative}
+.slot.sel{border-color:#ffd75e;box-shadow:0 0 8px rgba(255,215,94,.6)}
+.slot .num{position:absolute;top:2px;left:5px;font-size:10px;color:#9fb0c9}
+.slot .nm{position:absolute;bottom:3px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:700;color:#ffd75e;white-space:nowrap;text-shadow:0 1px 3px #000}
+.slot .ic{font-size:20px;line-height:1}
+.cell{width:44px;height:44px;background:#1a2333;border:2px solid #2a3a55;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:18px;position:relative}
+.cell.full{border-color:#ffd75e}
+.cell .cl{font-size:8px;font-weight:700;color:#ffd75e;line-height:1;margin-top:1px}
+#invPanel{position:absolute;top:60px;left:50%;transform:translateX(-50%);background:rgba(10,14,22,.95);border:2px solid #3a4f75;border-radius:12px;padding:16px;display:none;pointer-events:auto;min-width:320px}
+#invPanel.show{display:block}
+#invPanel h2{color:#ffd75e;font-size:16px;margin-bottom:10px;text-align:center}
+#invGrid{display:grid;grid-template-columns:repeat(9,44px);gap:6px;justify-content:center}
+#invHint{color:#9fb0c9;font-size:12px;text-align:center;margin-top:10px}
+.slot.dragging{opacity:.4}.cell.dragging{opacity:.4}
+#prompt{position:absolute;bottom:110px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.78);color:#7df9ff;border:1px solid rgba(125,249,255,.35);padding:8px 18px;border-radius:10px;font-size:15px;display:none;text-shadow:0 1px 3px #000}
+#prompt.throw{color:#ffcf6e;border-color:rgba(255,207,110,.5);font-weight:600;font-size:13px;padding:6px 14px}
+#dropBtn{position:absolute;bottom:76px;left:50%;transform:translateX(-50%);pointer-events:auto;cursor:pointer;background:rgba(0,0,0,.6);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:6px 14px;font-size:12px}
+#dropBtn:hover{background:rgba(60,20,20,.8)}
+#msg{position:absolute;bottom:140px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.75);color:#fff;padding:8px 18px;border-radius:10px;font-size:14px;display:none;max-width:80%;text-align:center}
+#overlay{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:rgba(5,8,15,.9);color:#fff;text-align:center;padding:24px}
+#overlay.hidden{display:none}
+#overlay .card{max-width:560px;background:#131a28;border:1px solid #2a3a55;border-radius:16px;padding:36px 32px}
+#overlay kbd{background:#222f47;border:1px solid #3a4f75;border-radius:6px;padding:2px 8px;font-size:13px;margin:0 2px}
+#playBtn{margin-top:18px;pointer-events:auto;cursor:pointer;background:#ffd75e;color:#111;border:none;font-size:18px;font-weight:700;padding:12px 42px;border-radius:12px}
+#win{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;background:rgba(4,20,8,.92);color:#fff;text-align:center}
+#win.show{display:flex}
+#win .card{background:#0f2416;border:1px solid #2f7a44;border-radius:16px;padding:40px}
+#win h1{font-size:36px;color:#7dff9e;margin-bottom:10px}
+#againBtn{margin-top:16px;cursor:pointer;background:#2f7a44;color:#fff;border:none;font-size:16px;padding:10px 32px;border-radius:10px}
+/* --- in-game keypad: a real panel inside the game, no browser popup --- */
+#padPanel{position:fixed;inset:0;z-index:25;display:none;align-items:center;justify-content:center;background:rgba(3,6,12,.72);pointer-events:auto}
+#padPanel.show{display:flex}
+#padBox{background:#12161f;border:2px solid #3a4f75;border-radius:16px;padding:20px 22px;width:280px;box-shadow:0 20px 60px rgba(0,0,0,.7)}
+#padTitle{color:#7df9ff;font-size:13px;text-transform:uppercase;letter-spacing:.14em;text-align:center;margin-bottom:14px}
+/* the 4-digit readout: one box per digit, laid out across */
+#padDigits{display:flex;gap:10px;justify-content:center;margin-bottom:16px}
+.padDigit{flex:1;height:62px;background:#05070c;border:2px solid #2a3a55;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:38px;font-weight:700;font-family:ui-monospace,monospace;color:#ffd75e;text-shadow:0 0 14px rgba(255,215,94,.45)}
+.padDigit.active{border-color:#ffd75e;box-shadow:0 0 10px rgba(255,215,94,.35)}
+#padGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.padKey{height:50px;background:#1c2330;border:1px solid #33415c;border-radius:9px;color:#e8eef7;font-size:19px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .08s,transform .08s}
+.padKey:hover{background:#27324a}
+.padKey:active{transform:translateY(1px);background:#33415c}
+.padKey.wide{grid-column:span 1;font-size:13px;letter-spacing:.05em}
+.padKey.enter{background:#1d4a30;border-color:#2f7a44;color:#9dffc0}
+.padKey.enter:hover{background:#266b44}
+.padKey.clear{background:#4a1d1d;border-color:#7a2f2f;color:#ffc0c0}
+.padKey.clear:hover{background:#6b2626}
+#padHint{color:#7b8798;font-size:11px;text-align:center;margin-top:12px;line-height:1.5}
+#padErr{color:#ff6b6b;font-size:12px;text-align:center;min-height:16px;margin-top:8px;font-weight:600}
+</style>
+<script>
+// --- fail loudly instead of silently -----------------------------------------
+// If three.js or the game script ever fails to load, show a red banner. Without
+// this a load failure just looks like a dead "Click to play" button. Note this
+// script runs from <head>, before <body> exists, so it appends to <html> as a
+// fallback rather than assuming a body.
+window.showFatal = function (msg) {
+  try {
+    var d = document.getElementById('fatal');
+    if (!d) {
+      d = document.createElement('div');
+      d.id = 'fatal';
+      d.style.cssText = 'position:fixed;inset:auto 0 0 0;z-index:99;background:#5a1414;color:#fff;' +
+        'font:13px/1.5 system-ui;padding:12px 16px;white-space:pre-wrap';
+      (document.body || document.documentElement).appendChild(d);
+    }
+    d.textContent = 'PROBLEM: ' + msg;
+  } catch (ignored) { /* never let the error reporter itself throw */ }
+};
+addEventListener('error', function (e) {
+  var what = e.message || (e.target && (e.target.src || e.target.href)) || 'unknown error';
+  window.showFatal(what + (e.lineno ? ' (line ' + e.lineno + ')' : ''));
+}, true);
+</script>
+<script src="three.min.js"></script>
+</head>
+<body>
+<script>window.__loadErr=[];addEventListener("error",e=>window.__loadErr.push(String(e.message||e.error)));</script>
+<div id="app"></div>
+<div id="hud"><div id="crosshair"></div><div id="objective">Find Key 1 and push east!</div><div id="inventory">Inventory: (empty)</div><div id="roomLabel">Room 1: Lobby</div><div id="prompt"></div><div id="msg"></div><div id="hotbar"></div><div id="invPanel"><h2>Inventory (Q or E to close)</h2><div id="invGrid"></div><div id="invHint">Drag items (or click one, then click another) to rearrange. 1-9 selects hotbar.</div></div></div>
+<div id="overlay"><div class="card"><h1>Escape Room 3D</h1><p><b>13 rooms, chained keys.</b><br/>Room 1 is full of junk — buttons, levers, sliders, dials, a fake keypad. <b>None of it works.</b> The real Key 1 is tiny and hiding in a corner...</p><p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move &bull; Mouse look &bull; <kbd>E</kbd> interact/throw &bull; <kbd>G</kbd> drop &bull; <kbd>Q</kbd> inventory &bull; <kbd>1</kbd>-<kbd>9</kbd> select slot<br/><span style="color:#9fb0c9;font-size:12px">Aim at something you can use and a prompt appears under the dot. If the mouse won't lock, hold the left button and drag to look around.</span></p><button id="playBtn">Click to play</button></div></div>
+<div id="win"><div class="card"><h1>You escaped!</h1><p id="winTime"></p><button id="againBtn">Play again</button></div></div>
+<!-- in-game keypad. Built by the JS in SECTION 7; the 4-digit readout starts at 0000 -->
+<div id="padPanel"><div id="padBox">
+  <div id="padTitle">Enter Code</div>
+  <div id="padDigits"></div>
+  <div id="padGrid"></div>
+  <div id="padErr"></div>
+  <div id="padHint">Click the digits, or just type them.<br/>Enter = submit &nbsp; Backspace = erase &nbsp; Esc = cancel</div>
+</div></div>
+<script>
+// three.js comes from the local "three.min.js" file sitting next to this page:
+// no CDN, no network, no build step, no import maps — so it works offline, in
+// Safari, and even when you just double-click index.html.
+if (typeof THREE === 'undefined') {
+  window.showFatal('three.min.js did not load. Make sure three.min.js is in the same ' +
+    'folder as index.html, then reload.');
+  throw new Error('three.js missing');
+}
+
+// ============================================================================
+//  ESCAPE ROOM 3D — single-file game (no build step, no dependencies)
+// ----------------------------------------------------------------------------
+//  FILE MAP — search for "SECTION n" to jump straight to a part of the game:
+//
+//    SECTION 1  CONFIG........... room count/size, palette, the key list
+//    SECTION 2  STATE............ game state + inventory + world registries
+//    SECTION 3  ENGINE........... three.js renderer/camera/lights + HUD handles
+//    SECTION 4  PRIMITIVES....... mat() box() label()
+//    SECTION 5  WORLD BUILD...... room shells, locked doors, EXIT door,
+//                                 spawnKey(), default contents (rooms 2..N)
+//    SECTION 6  ITEMS & PICKUPS.. spawnPickup giveItem dropSelected throwBall
+//    SECTION 7  PUZZLE TOOLKIT... makeLock makeSafe + decoy gadgets
+//    SECTION 8  LEVEL 1 LOBBY.... <-- EDIT ROOM 1 HERE (decoy wall + hidden key)
+//    SECTION 9  HUD & INVENTORY.. objective text, messages, Q panel, drag & drop
+//    SECTION 10 INPUT............ player, WASD, mouse look, pointer lock
+//    SECTION 11 MAIN LOOP........ collision, interaction, render + animation
+//
+//  COMMON JOBS
+//    More rooms ......... SECTION 1: raise ROOM_COUNT (everything else follows)
+//    Change room 1 ...... SECTION 8: add decoyBtn/decoyLever/decoySlider lines
+//    Add random junk .... SECTION 8: add entries to the JUNK array
+//    Add a real puzzle .. SECTION 7 toolkit, then place it in SECTION 8 or 5
+//    Restyle the HUD .... the <style> block at the top of this file
+// ============================================================================
+
+// ============================================================================
+// SECTION 1 — CONFIG (start here)
+// ============================================================================
+// Rooms are identical boxes lined up along +X; the player walks west -> east.
+// Room 1 = Lobby (Key 1 hides inside it), rooms 2..12 each hold the key for the
+// NEXT door, the last room = Exit. Raise ROOM_COUNT and rooms/doors/keys all
+// regenerate automatically.
+const ROOM_W = 10, ROOM_D = 8, WALL_H = 3.2, WALL_T = 0.4;
+const ROOM_COUNT = 13;
+// Every room shares ONE floor colour: the dark green that used to be room 3's
+// (PALETTE[2] below). Set this to any hex to restyle every floor at once.
+const FLOOR_COLOR = 0x1e4a2e;
+// The ceiling lamp housing is a clearly readable mid-grey, so it reads as a
+// fixture instead of washing out to white under the light.
+const LAMP_SHADE = 0x8e9296;
+// Per-room accent colours. NOT used for floors (all floors are FLOOR_COLOR) —
+// they are here for decoration code to tint props per room if you want to.
+const PALETTE = [0x2a3a55, 0x4a3a1a, 0x1e4a2e, 0x4a1e2e, 0x2e2a55, 0x3a3a1e];
+const LEVELS = [];
+for (let i = 0; i < ROOM_COUNT; i++) {
+  const n = i + 1;
+  const name = n === 1 ? 'Room 1: Lobby' : (n === ROOM_COUNT ? `Room ${n}: Exit` : `Room ${n}`);
+  // noSign: room 1 shows NO wall signage at all (not even its room-name banner).
+  // The HUD still names the room in the corner — that is UI, not room signage.
+  // riddleSign: room 2's north wall carries the colour-riddle sign instead of
+  // the usual "Room 2" banner (see decorateRiddleRoom in SECTION 5).
+  LEVELS.push({
+    name, cx: ROOM_W * i, color: PALETTE[i % PALETTE.length],
+    noSign: i === 0, riddleSign: i === 1,
+  });
+}
+// One key per door. Key N lives in room index N-1 and opens Door N, which is the
+// locked door on that room's east side.
+const KEY_COLORS = [0xffd75e, 0x7df9ff, 0x7dff9e, 0xff9e7d, 0xc79eff, 0xff7db9,
+  0x9eff7d, 0x7d9eff, 0xffe27d, 0x7dffe2, 0xe27dff, 0xffd27d];
+const ITEMS = [];
+for (let r = 0; r < ROOM_COUNT - 1; r++) {
+  ITEMS.push({ id: 'key' + (r + 1), room: r, dx: 0, dz: -2.2, label: 'Key ' + (r + 1), icon: '🔑' });
+}
+
+// DOOR PASSWORDS — doors opened by typing a code on the in-game keypad instead
+// of using a key. Keyed by DOOR INDEX (door index N sits on room index N's east
+// side, so door index 1 is the door inside room 2).
+//   1 -> '5414'  room 2's door, solved by the colour riddle on its north wall.
+// Doors listed here have no key: buildDoor() skips the key requirement entirely,
+// and the room that would have held the key should skip it too.
+const DOOR_PASSWORDS = { 1: '5414' };
+
+// ============================================================================
+// SECTION 2 — STATE + WORLD REGISTRIES
+// ----------------------------------------------------------------------------
+// Every shared registry is declared exactly ONCE, here. Each is filled in by the
+// section that owns it and read by SECTION 11's main loop.
+// ============================================================================
+const state = {
+  won: false, started: false, t0: 0,
+  doorsOpen: new Set(),  // indices of doors already unlocked
+  locks: {},             // lockId -> { solved }  (see makeLock, SECTION 7)
+  safes: {},             // safeId -> { opened }  (see makeSafe, SECTION 7)
+};
+// Keys are deliberately NOT tracked separately: the inventory is the single
+// source of truth, so picking up / dropping / using a key can never desync.
+// haveKey('key3') -> "is Key 3 in my inventory right now?" (SECTION 9)
+// Minecraft-style inventory: 9 hotbar slots + 27 backpack = 36 slots total.
+const inv = { slots: new Array(36).fill(null), sel: 0, open: false };
+
+const colliders = [];      // { minX, maxX, minZ, maxZ } solid boxes that block movement
+const interactables = [];  // { mesh, kind, radius, prompt(), action() } things E can use
+const decoys = [];         // little blinking ceiling lights in room 1
+const levers = [];         // wall levers that swing up/down when pulled (room 1)
+const pickups = [];        // items sitting on the floor: { item, mesh }
+const doorMeshes = {};     // doorIndex -> { mesh, collider, extras }
+// Keys stay hidden until you are close AND looking straight at them.
+// { mesh, label } — filled by spawnKey(), and by any key you drop on the floor.
+const keySpots = [];
+// How close you must be before a key appears, and how far off your crosshair
+// you may look and still see it. 2.4 units is about one stride away; 0.50 rad
+// is roughly a 29-degree cone either side, so you have to look AT the key rather
+// than just glance somewhere in its direction.
+const KEY_SEE_DIST = 2.4, KEY_SEE_ANGLE = 0.50;
+
+// ============================================================================
+// SECTION 3 — ENGINE (three.js setup) + HUD ELEMENT HANDLES
+// ----------------------------------------------------------------------------
+// Boring plumbing. You rarely need to touch this section.
+// ============================================================================
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+app.appendChild(renderer.domElement);
+// Lighting/colour compatibility shim. three.min.js is the three.js **r160 UMD
+// build — the same renderer version this game was written on**, so the lighting
+// is exactly what it was on day one (verified by pixel measurement: identical
+// mean/percentiles against r160's ES-module build). The lines below are
+// feature-detected safety nets, so if a different UMD build is ever dropped in
+// (r147..r160) it still uses the same modern light + colour defaults.
+if ('useLegacyLights' in renderer) renderer.useLegacyLights = false;
+else if ('physicallyCorrectLights' in renderer) renderer.physicallyCorrectLights = true;
+if (THREE.ColorManagement && 'legacyMode' in THREE.ColorManagement) THREE.ColorManagement.legacyMode = false;
+if ('outputColorSpace' in renderer && THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0e14);
+scene.fog = new THREE.Fog(0x0b0e14, 18, 46);
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 200);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x223344, 0.9));
+const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+sun.position.set(6, 12, 8); scene.add(sun);
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// HUD handles are grabbed up here so every section below can call showMsg()/setObj().
+const elObj = document.getElementById('objective');
+const elInv = document.getElementById('inventory');
+const elRoom = document.getElementById('roomLabel');
+const elPrompt = document.getElementById('prompt');
+const elMsg = document.getElementById('msg');
+const elHotbar = document.getElementById('hotbar');
+const elInvPanel = document.getElementById('invPanel');
+const elInvGrid = document.getElementById('invGrid');
+let msgTimer = 0;
+function setObj(t) { elObj.textContent = t; }
+function setInv(t) { elInv.textContent = t; }
+function showMsg(t, ms = 3200) {
+  elMsg.textContent = t; elMsg.style.display = 'block';
+  clearTimeout(msgTimer); msgTimer = setTimeout(() => elMsg.style.display = 'none', ms);
+}
+
+// ============================================================================
+// SECTION 4 — BUILD PRIMITIVES
+// ----------------------------------------------------------------------------
+// Everything in the world is a box (or a simple mesh) created through these
+// helpers. box() mirrors each solid mesh with a collider entry so walls, tables
+// and crates actually block movement. collide=false is for trim above head
+// height (like the lintel over a doorway).
+// ============================================================================
+function mat(color) { return new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.05 }); }
+function box(w, h, d, color, x, y, z, collide = true) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color));
+  m.position.set(x, y, z); scene.add(m);
+  if (collide) colliders.push({ minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2 });
+  return m;
+}
+// Floating text plane in 3D space. Room 1 deliberately has NO signage of any
+// kind (LEVELS[0].noSign), so nothing in room 1 calls this.
+function label(text, x, y, z, size = 44, color = '#ffd75e') {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(0,0,0,0.65)'; g.fillRect(0, 0, 512, 128);
+  g.fillStyle = color; g.font = `bold ${size}px system-ui`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text, 256, 64);
+  const t = new THREE.CanvasTexture(c);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.85),
+    new THREE.MeshBasicMaterial({ map: t, transparent: true }));
+  m.position.set(x, y, z); scene.add(m); return m;
+}
+
+// Lighten a #rrggbb colour toward white by `amt` (0 = same, 1 = white).
+function tint(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const mix = c => Math.round(c + (255 - c) * amt);
+  return `rgb(${mix((n >> 16) & 255)},${mix((n >> 8) & 255)},${mix(n & 255)})`;
+}
+// A MULTI-LINE wall sign whose lines can each be a different colour.
+//   lines: [{ text, color, dot?, caps? }]
+//     dot  — paints a filled circle in `color` before the text (the riddle's
+//            colour clues, so the colour always reads without an emoji font)
+//     caps — underlines every CAPITALISED word. This is what makes the riddle's
+//            "CAPITALS reveal each part" a mechanic the player can see, rather
+//            than something they must guess.
+function signBoard(lines, x, y, z, opts = {}) {
+  const W = opts.width || 1400, pad = opts.pad || 22, lineH = opts.lineH || 66;
+  const size = opts.size || 32;
+  const H = pad * 2 + lineH * lines.length;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(6,10,16,0.90)'; g.fillRect(0, 0, W, H);
+  g.strokeStyle = 'rgba(214,190,128,0.55)'; g.lineWidth = 4; g.strokeRect(2, 2, W - 4, H - 4);
+  g.textBaseline = 'middle'; g.textAlign = 'left';
+  // Auto-fit: shrink the font until the WIDEST line fits inside the board, so a
+  // machine without Georgia (or any other font fallback) can never clip the
+  // riddle. Re-measured per line, because a fallback font can be wider.
+  const font = px => `bold ${px}px Georgia, "Times New Roman", serif`;
+  const swatchW = size * 0.95;
+  const room = W - (pad + 10) - swatchW - pad;
+  let fit = size;
+  g.font = font(size);
+  const widest = Math.max(...lines.map(ln => g.measureText(ln.text).width));
+  if (widest > room && widest > 0) {
+    fit = Math.max(9, Math.floor(size * room / widest));
+    g.font = font(fit);
+  }
+  lines.forEach((ln, i) => {
+    const cy = pad + lineH * (i + 0.5);
+    let x0 = pad + 10;
+    if (ln.dot) {                       // painted colour swatch
+      g.fillStyle = ln.color;
+      g.beginPath(); g.arc(x0 + fit * 0.34, cy, fit * 0.36, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = 2; g.stroke();
+      x0 += fit * 0.95;
+    }
+    g.fillStyle = ln.color;
+    g.font = font(fit);
+    // 1) measure where the CAPITAL words start, using the same font we draw with
+    let capXs = [];
+    if (ln.caps) {
+      let cursor = 0;
+      for (const word of ln.text.split(' ')) {
+        if (/^[A-Z]/.test(word)) capXs.push([cursor, word.length]);
+        cursor += word.length + 1;      // +1 for the space
+      }
+    }
+    // 2) the line itself, in full
+    g.fillStyle = ln.color;
+    g.font = font(fit);
+    g.fillText(ln.text, x0, cy);
+    // 3) underline each capital so it reads as "this is the part that counts"
+    g.strokeStyle = tint(ln.color, 0.45); g.lineWidth = Math.max(1.5, fit * 0.06);
+    for (const [at, len] of capXs) {
+      const wBefore = g.measureText(ln.text.slice(0, at)).width;
+      const wWord = g.measureText(ln.text.substr(at, len)).width;
+      g.beginPath();
+      g.moveTo(x0 + wBefore, cy + fit * 0.56);
+      g.lineTo(x0 + wBefore + wWord, cy + fit * 0.56);
+      g.stroke();
+    }
+  });
+  const t = new THREE.CanvasTexture(c);
+  // world size follows the canvas aspect ratio so nothing is squashed
+  const worldW = opts.worldW || 8.6, worldH = worldW * (H / W);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(worldW, worldH),
+    new THREE.MeshBasicMaterial({ map: t, transparent: true }));
+  m.position.set(x, y, z); scene.add(m);
+  m.userData.signLines = lines;          // lets tests read the text + colours back
+  m.userData.signFont = fit;             // the auto-fitted font size actually used
+  m.userData.signWidth = W;
+  return m;
+}
+
+// ============================================================================
+// SECTION 5 — WORLD BUILD (room shells, locked doors, keys, EXIT)
+// ----------------------------------------------------------------------------
+// Every room is the same shell: floor, four walls, ceiling, a ceiling lamp. The
+// east and west walls get a doorway gap, and a LOCKED door slab fills that gap.
+// Door N is the door on room N's east side and is opened with Key N.
+//
+// CONTENTS: decorateRoom(i) picks a decorator per room index:
+//   - rooms 2..N use decorateDefaultRoom()  (table + this room's key + label)
+//   - room 1 overrides it with decorateLobby() from SECTION 8
+// To customise any single other room, register your own decorator the same way.
+// ============================================================================
+function buildRoom(lv, i, isLast) {   // isLast is informational; all rooms share the same shell
+  const cx = lv.cx, hw = ROOM_W / 2, hd = ROOM_D / 2;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_W, ROOM_D), mat(FLOOR_COLOR));
+  floor.rotation.x = -Math.PI / 2; floor.position.set(cx, 0, 0); scene.add(floor);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_W, ROOM_D),
+    new THREE.MeshStandardMaterial({ color: 0x11161f, roughness: 1 }));
+  ceil.rotation.x = Math.PI / 2; ceil.position.set(cx, WALL_H, 0); scene.add(ceil);
+  const lamp = new THREE.PointLight(0xfff2cc, 25, 14); lamp.position.set(cx, WALL_H - 0.4, 0); scene.add(lamp);
+  // the lit bulb itself stays warm white; the SHADE around it is the grey part
+  box(0.7, 0.15, 0.7, LAMP_SHADE, cx, WALL_H - 0.35, 0, false); // lamp housing (no collide)
+  // north + south walls (solid)
+  box(ROOM_W + WALL_T, WALL_H, WALL_T, 0x1c2636, cx, WALL_H / 2, -hd);
+  box(ROOM_W + WALL_T, WALL_H, WALL_T, 0x1c2636, cx, WALL_H / 2, hd);
+  // west wall: solid for room 1, doorway gap otherwise
+  if (i === 0) box(WALL_T, WALL_H, ROOM_D + WALL_T, 0x1c2636, cx - hw, WALL_H / 2, 0);
+  else {
+    const seg = (ROOM_D - 2.2) / 2;
+    box(WALL_T, WALL_H, seg, 0x1c2636, cx - hw, WALL_H / 2, -(1.1 + seg / 2));
+    box(WALL_T, WALL_H, seg, 0x1c2636, cx - hw, WALL_H / 2, 1.1 + seg / 2);
+    box(WALL_T, 0.5, 2.2, 0x1c2636, cx - hw, WALL_H - 0.25, 0, false); // lintel (above head)
+  }
+  // east wall: always built with a doorway gap. Rooms 1..N-1 get a chained
+  // locked door in that gap; the last room gets the EXIT door (built below).
+  {
+    const seg = (ROOM_D - 2.2) / 2;
+    box(WALL_T, WALL_H, seg, 0x33507a, cx + hw, WALL_H / 2, -(1.1 + seg / 2));
+    box(WALL_T, WALL_H, seg, 0x33507a, cx + hw, WALL_H / 2, 1.1 + seg / 2);
+    box(WALL_T, 0.5, 2.2, 0x33507a, cx + hw, WALL_H - 0.25, 0, false); // lintel (above head)
+  }
+  // room-name banner on the north wall — skipped in room 1 (no signage at all)
+  // and in room 2, whose north wall is taken over by the riddle sign.
+  if (!lv.noSign && !lv.riddleSign) label(lv.name, cx, 2.3, -ROOM_D / 2 + 0.25);
+}
+
+// --- locked doors -----------------------------------------------------------
+// buildDoor(N) puts a full-frame door slab (floor to lintel, no text label) in
+// the doorway on room N's east side. It blocks movement until Key N is used on
+// it, then slides up out of the way and stops colliding.
+function buildDoor(doorIdx) {
+  const x = LEVELS[doorIdx].cx + ROOM_W / 2;
+  const DOOR_H = WALL_H - 0.45;
+  const mesh = box(0.35, DOOR_H, 2.2, 0x6e451f, x, DOOR_H / 2, 0, true);
+  const collider = colliders[colliders.length - 1];
+  const entry = { mesh, collider, extras: [] };
+  doorMeshes[doorIdx] = entry;
+  // wood panels + knob so it reads as a door without a label
+  const panelMat = new THREE.MeshStandardMaterial({ color: 0x7d5226, roughness: 0.7 });
+  for (const px of [x - 0.2, x + 0.2]) {
+    for (const pz of [-0.55, 0.55]) {
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(0.02, DOOR_H - 1.0, 0.8), panelMat);
+      panel.position.set(px, DOOR_H / 2, pz); scene.add(panel);
+      entry.extras.push(panel);
+    }
+  }
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 10),
+    new THREE.MeshStandardMaterial({ color: 0xffd75e, metalness: 0.9, roughness: 0.3 }));
+  knob.position.set(x - 0.25, 1.05, 0.75); scene.add(knob);
+  entry.extras.push(knob);
+
+  // Two kinds of door, chosen by DOOR_PASSWORDS (SECTION 1):
+  //   no entry -> needs Key (doorIdx+1) in the inventory, which it consumes
+  //   has entry -> needs that 4-digit code typed on the in-game keypad, no key
+  const pass = DOOR_PASSWORDS[doorIdx];
+  const need = 'key' + (doorIdx + 1);
+  // shared "this door is now open" routine, called by whichever unlock path ran
+  const openDoor = () => {
+    state.doorsOpen.add(doorIdx);
+    const ci = colliders.indexOf(collider);
+    if (ci >= 0) colliders.splice(ci, 1);    // doorway is walkable now
+    mesh.position.y = 3.4;                   // slide the slab up out of the way
+    for (const ex of entry.extras) ex.visible = false;
+    mesh.material.color.set(0x2f7a44);
+    const next = doorIdx + 2;
+    setObj(next >= ROOM_COUNT ? 'Escape through the EXIT!' : `Find ${needLabel('key' + next)} in Room ${next}!`);
+    return next;
+  };
+
+  interactables.push({
+    mesh, kind: 'door', doorIdx, radius: 2.8,
+    prompt: () => state.doorsOpen.has(doorIdx) ? '' :
+      (pass ? '[E] Enter code on door'
+            : (haveKey(need) ? `[E] Use ${needLabel(need)} on door`
+                             : `Locked - needs ${needLabel(need)}`)),
+    action: () => {
+      if (state.doorsOpen.has(doorIdx)) return;
+      if (pass) {
+        // PASSWORD DOOR — opens the same in-game keypad makeLock() uses.
+        // The code is never shown in the prompt; the player reads it off the
+        // riddle sign (the `code` field is only kept for reference/validation).
+        openKeypad({
+          title: `Door ${doorIdx + 1} — Enter Code`, code: pass,
+          onSubmit: (entered) => {
+            if (entered === String(pass)) {
+              const next = openDoor();
+              showMsg(`Door ${doorIdx + 1} unlocked! Go east into Room ${next}.`);
+            } else {
+              showMsg(`Door ${doorIdx + 1}: BZZZT. ${entered} is wrong.`);
+            }
+          },
+          onCancel: () => showMsg(`Door ${doorIdx + 1}: cancelled.`),
+        });
+        return;
+      }
+      if (!haveKey(need)) { showMsg(`This door needs ${needLabel(need)}. Check this room for it.`); return; }
+      consumeItem(need);                       // the key is used up
+      const next = openDoor();
+      showMsg(`${needLabel(need)} used up — Door ${doorIdx + 1} unlocked! Go east into Room ${next}.`);
+    }
+  });
+}
+
+// --- room contents: one decorator function per room index -------------------
+const ROOM_DECORATORS = {};   // roomIndex -> function(lv, i)
+function decorateRoom(i, lv) { (ROOM_DECORATORS[i] || decorateDefaultRoom)(lv, i); }
+// Height of a table's top surface. tableAt() is the only thing that builds
+// tables, so this is the one number that says where a key laid on one should sit.
+const TABLE_TOP = 0.91;   // 0.85 leg/centre + half of the 0.12-thick top
+function tableAt(x, z) {
+  box(1.8, 0.12, 1.0, 0x6b4a1f, x, 0.85, z);
+  box(0.12, 0.85, 0.12, 0x4a3315, x - 0.75, 0.42, z - 0.4);
+  box(0.12, 0.85, 0.12, 0x4a3315, x + 0.75, 0.42, z - 0.4);
+  box(0.12, 0.85, 0.12, 0x4a3315, x - 0.75, 0.42, z + 0.4);
+  box(0.12, 0.85, 0.12, 0x4a3315, x + 0.75, 0.42, z + 0.4);
+}
+// DEFAULT ROOM TEMPLATE — rooms 2..N: an empty room, a table, and the key that
+// opens the next door. Want another room to feel different? Register your own
+// decorator next to room 1's, e.g.
+//     ROOM_DECORATORS[4] = lv => { box(1, 1, 1, 0x884444, lv.cx, 0.5, 0); };
+function decorateDefaultRoom(lv, i) {
+  const kd = ITEMS[i];
+  if (!kd) return;                       // the last room has no key (it holds the EXIT)
+  tableAt(lv.cx + kd.dx, kd.dz);
+  spawnKey({ kd, x: lv.cx + kd.dx, z: kd.dz, y: TABLE_TOP });
+}
+
+// --- ROOM 2: THE RIDDLE ROOM -------------------------------------------------
+// No table, no key. The north wall carries the colour-riddle sign (in place of
+// the usual "Room 2" banner — see LEVELS[1].riddleSign in SECTION 1), and the
+// east door is opened by typing DOOR_PASSWORDS[1] on the in-game keypad.
+//
+// To change the riddle, edit RIDDLE below. To change the answer, edit
+// DOOR_PASSWORDS[1] in SECTION 1 — nothing else needs to change.
+const RIDDLE = [
+  // Opening couplet + instructions: neutral parchment, not a colour clue.
+  { text: 'Four numbers guard what you seek,',        color: '#e8d9b0' },
+  { text: 'But none are written where you peek.',      color: '#e8d9b0' },
+  { text: 'Colors tell you where to start,',           color: '#e8d9b0' },
+  { text: 'And CAPITALS reveal each part.',            color: '#e8d9b0' },
+  // The four clues. Each line is painted in its own colour, carries a painted
+  // swatch, and has its CAPITAL words underlined — because the only
+  // self-consistent way to read these lines is "count the capitals per colour",
+  // so the puzzle shows you what to count. See riddleCodeFrom() below.
+  { text: 'the Silent Owl Watches From Above while others sleep.', color: '#ff5a5a', dot: true, caps: true },
+  { text: 'beneath the Moon, Shadows Dance Quietly.',                color: '#ffd75e', dot: true, caps: true },
+  { text: 'a single Raven watches from the wall.',                   color: '#5aff8a', dot: true, caps: true },
+  { text: 'forgotten Keys Hide Behind Curtains near the door.',      color: '#6db3ff', dot: true, caps: true },
+];
+// The riddle's answer, DERIVED from the sign itself: for each coloured clue
+// line, count the capitalised words. That yields one digit per colour, in the
+// order the lines appear (red, yellow, green, blue).
+function riddleCodeFrom(lines) {
+  return lines.filter(ln => ln.dot && ln.caps)
+    .map(ln => ln.text.split(' ').filter(w => /^[A-Z]/.test(w)).length)
+    .join('');
+}
+// If the sign and DOOR_PASSWORDS ever disagree, the puzzle would be unsolvable —
+// so check it at startup and shout in the console rather than failing silently.
+(function verifyRiddle() {
+  const derived = riddleCodeFrom(RIDDLE), set = String(DOOR_PASSWORDS[1]);
+  if (derived !== set) {
+    console.warn(`[riddle] sign yields "${derived}" but Door 2 expects "${set}". ` +
+                 'Fix the capitals in RIDDLE (or the password in SECTION 1).');
+  }
+})();
+function decorateRiddleRoom(lv) {
+  // Only the sign: no tableAt(), no spawnKey() — room 2's door takes a code.
+  signBoard(RIDDLE, lv.cx, 1.7, -ROOM_D / 2 + 0.25, {
+    width: 1200, pad: 16, lineH: 44, size: 22, worldW: 9.0,
+  });
+}
+ROOM_DECORATORS[1] = decorateRiddleRoom;
+
+// --- keys -------------------------------------------------------------------
+// makeKeyMesh() is the single source of truth for what a key looks like. It is
+// used both for keys sitting in the world and for keys you drop, so a dropped
+// key can never turn into something else (it used to fall through pickupMesh()
+// and come back as a grey rock, because the inventory copy had no `mesh` field).
+function makeKeyMesh(color, scale = 1) {
+  const g = new THREE.Group();
+  const m = new THREE.MeshStandardMaterial({ color, metalness: 0.85, roughness: 0.25 });
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.55, 12), m);
+  const bow = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.05, 10, 20), m);
+  bow.position.y = 0.4;
+  // teeth on the bit end, so it reads as a key instead of a dumbbell
+  const toothA = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.12, 0.055), m);
+  toothA.position.set(0, -0.22, 0);
+  const toothB = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.09, 0.055), m);
+  toothB.position.set(0, -0.30, 0);
+  g.add(shaft, bow, toothA, toothB);
+  // Lay it FLAT: the shaft runs along the floor and the bow ring lies flat too,
+  // so a dropped key rests on the ground instead of standing on end in mid-air.
+  g.rotation.x = -Math.PI / 2;
+  if (scale !== 1) g.scale.setScalar(scale);
+  g.userData.restY = 0.05 * scale;   // shaft and ring just kissing the floor
+  // A key is small, so demanding a pixel-perfect raycast at the real geometry
+  // would be unfair. This invisible sphere covers roughly the key's own
+  // silhouette: aiming anywhere on the key counts as looking at it, aiming
+  // anywhere else does not. material.visible=false means it is never drawn.
+  // The group is rotated flat, so a child offset of +h in local Y lands at
+  // world -h along the key's length; 0.05 puts the proxy at the body's centre
+  // (shaft + bow span local y -0.345..0.45, midpoint 0.05).
+  const proxy = new THREE.Mesh(
+    new THREE.SphereGeometry(0.46 * scale, 10, 8),
+    new THREE.MeshBasicMaterial());
+  proxy.material.visible = false;    // no draw call, still raycastable
+  proxy.position.y = 0.05;           // centred on the key's body, not its anchor
+  proxy.userData.hitProxy = true;
+  g.add(proxy);
+  return g;
+}
+// spawnKey({ kd, x, z, y, scale, color, sign })
+//   kd    = an entry from ITEMS (supplies id + label)
+//   y     = height of the SURFACE the key rests on (floor 0, table top 0.91).
+//           The key's own rest height is added on top, so it lies on the surface.
+//   scale = 1 is normal size; room 1 passes 0.35 for a tiny key
+//   color = null -> this room's palette colour; room 1 passes dull grey
+//   sign  = false -> no floating label over the key (room 1 hides it)
+function spawnKey({ kd, x, z, y = 0, scale = 1, color = null, sign = true }) {
+  const hex = color === null ? KEY_COLORS[kd.room % KEY_COLORS.length] : color;
+  const km = makeKeyMesh(hex, scale);
+  const restY = km.userData.restY;      // lies flat, just kissing the surface
+  km.position.set(x, y + restY, z);
+  km.visible = false;                 // nothing to see until you are close + looking
+  scene.add(km);
+  const lab = sign ? label(kd.label.toUpperCase(), x, y + restY + 0.55, z, 40, '#7df9ff') : null;
+  if (lab) lab.visible = false;       // the sign follows the key, never floats alone
+  keySpots.push({ mesh: km, label: lab });
+  // The inventory copy carries the key's appearance, so dropping it rebuilds
+  // this exact key instead of guessing from the item id.
+  const rec = { id: kd.id, label: kd.label, icon: kd.icon, mesh: 'key', color: hex, scale };
+  interactables.push({
+    mesh: km, kind: 'key', keyId: kd.id, radius: KEY_SEE_DIST, aimOnly: true,
+    prompt: () => haveKey(kd.id) ? '' : `[E] Pick up ${kd.label}`,
+    action: () => {
+      if (haveKey(kd.id)) return;
+      // Unregister the interaction, otherwise a "phantom" key stays grabbable at
+      // this spot after a door eats the real one.
+      const ii = interactables.findIndex(t => t.mesh === km);
+      if (ii >= 0) interactables.splice(ii, 1);
+      const ki = keySpots.findIndex(k => k.mesh === km);
+      if (ki >= 0) keySpots.splice(ki, 1);
+      scene.remove(km);
+      if (lab) scene.remove(lab);
+      giveItem({ ...rec });
+      setObj(`Unlock Door ${kd.room + 1} with ${kd.label}!`);
+      showMsg(kd.room === 0 ? `Sneaky! ${kd.label} was hiding in the corner. Use it on the door (east side).`
+                            : `Picked up ${kd.label}. Use it on Door ${kd.room + 1} (east side).`);
+    }
+  });
+  return km;
+}
+// --- keys only appear when you are CLOSE and actually LOOKING at them ----------
+// Two conditions, both required: within KEY_SEE_DIST, and the angle between
+// where the camera is pointing and the direction to the key is under
+// KEY_SEE_ANGLE. Walking past, or staring at the wall beside it, hides it
+// again. This is what makes finding a key feel like searching instead of
+// walking over a glowing marker.
+const keyFwd = new THREE.Vector3(), keyTo = new THREE.Vector3();
+function updateKeyVisibility() {
+  camera.getWorldDirection(keyFwd);
+  for (const k of keySpots) {
+    if (!k.mesh) continue;
+    k.mesh.getWorldPosition(keyTo);
+    const dist = keyTo.distanceTo(camera.position);
+    let show = dist <= KEY_SEE_DIST;
+    if (show) {
+      keyTo.sub(camera.position).normalize();
+      show = keyFwd.angleTo(keyTo) <= KEY_SEE_ANGLE;
+    }
+    k.mesh.visible = show;
+    if (k.label) k.label.visible = show;
+  }
+}
+
+// --- build the building -----------------------------------------------------
+LEVELS.forEach((lv, i) => buildRoom(lv, i, i === LEVELS.length - 1));
+for (let d = 0; d < ROOM_COUNT - 1; d++) buildDoor(d);  // Door N on room N's east side
+
+// --- final EXIT door (east wall of the last room) ---------------------------
+// Fills the doorway like every other door but has no key: press E at it once all
+// 12 chained doors are open to finish the game.
+const lastRoom = LEVELS[LEVELS.length - 1];
+const EXIT_H = WALL_H - 0.45;
+const exitDoor = box(0.35, EXIT_H, 2.2, 0x8a2a2a, lastRoom.cx + ROOM_W / 2, EXIT_H / 2, 0, true);
+label('EXIT', lastRoom.cx + ROOM_W / 2 - 0.3, 2.6, 0, 52, '#ff8a8a');
+const exitCollider = colliders[colliders.length - 1];
+interactables.push({
+  mesh: exitDoor, kind: 'exit', radius: 2.6,
+  prompt: () => {
+    if (state.doorsOpen.size < ROOM_COUNT - 1) return `Locked - open all ${ROOM_COUNT - 1} doors first (${state.doorsOpen.size}/${ROOM_COUNT - 1})`;
+    return '[E] Escape!';
+  },
+  action: () => {
+    if (state.won) return;
+    if (state.doorsOpen.size < ROOM_COUNT - 1) { showMsg(`Locked. You still need ${ROOM_COUNT - 1 - state.doorsOpen.size} door(s). Keep chaining keys east!`); return; }
+    state.won = true;
+    const idx = colliders.indexOf(exitCollider);
+    if (idx >= 0) colliders.splice(idx, 1);   // doorway is walkable now
+    exitDoor.material.color.set(0x2f7a44);
+    const secs = Math.round((performance.now() - state.t0) / 1000);
+    document.getElementById('winTime').textContent = `Time: ${secs}s — rooms: ${LEVELS.length}, doors opened: ${state.doorsOpen.size}`;
+    document.getElementById('win').classList.add('show');
+    document.exitPointerLock && document.exitPointerLock();
+  }
+});
+
+// ============================================================================
+// SECTION 6 — ITEMS & PICKUPS
+// ----------------------------------------------------------------------------
+// Anything lying on the floor (junk, dropped items, the ball) is a "pickup":
+// spawnPickup() makes the mesh and registers the [E] interaction, and the item
+// carries its own data. Add new looks by adding a case to pickupMesh().
+// ============================================================================
+// A pickup item looks like: { id, label, icon, mesh, color, blurb }
+//   id    unique id ('key3', 'ball', 'junk_mug')
+//   icon  emoji shown in the inventory
+//   mesh  shape key for pickupMesh(): ball | key | cube | bottle | book | junk
+//   blurb message shown when you pick it up
+function pickupMesh(item) {
+  const kind = item.mesh || 'junk';
+  // Keys are NOT rebuilt here — makeKeyMesh() owns their look, so a key you
+  // carry and drop is the same object you picked up.
+  if (kind === 'key') return makeKeyMesh(item.color || 0xffd75e, item.scale || 1);
+  const g = new THREE.Group();
+  if (kind === 'ball') {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.22, 18, 14),
+      new THREE.MeshStandardMaterial({ color: 0xff5533, roughness: 0.35 }));
+    const stripe = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.03, 8, 24),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 }));
+    stripe.rotation.x = Math.PI / 2; g.add(b, stripe); return g;
+  }
+  if (kind === 'cube') {
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35),
+      new THREE.MeshStandardMaterial({ color: item.color || 0x8899aa, roughness: 0.7 })));
+    return g;
+  }
+  if (kind === 'bottle') {
+    const bm = new THREE.MeshStandardMaterial({ color: item.color || 0x33aa66, roughness: 0.3 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.42, 12), bm);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.16, 10), bm);
+    neck.position.y = 0.28; g.add(body, neck); return g;
+  }
+  if (kind === 'book') {
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.42, 0.09),
+      new THREE.MeshStandardMaterial({ color: item.color || 0xaa3333, roughness: 0.8 })));
+    return g;
+  }
+  const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.2),
+    new THREE.MeshStandardMaterial({ color: item.color || 0x777777, roughness: 0.9 }));
+  g.add(rock); return g;
+}
+// spawnPickup(item, x, z, { y, radius }) — places an item that sits still in the
+// world. Picking it up (E) removes the mesh and puts it in the inventory.
+function spawnPickup(item, x, z, opts = {}) {
+  const rm = pickupMesh(item);
+  // A dropped key lies FLAT on the floor at its own rest height, not floating at
+  // the generic pickup height, and it obeys the same close+look reveal rule.
+  const isKey = item.mesh === 'key';
+  const y = opts.y !== undefined ? opts.y
+          : (isKey ? (rm.userData.restY || 0.05) : 0.5);
+  rm.position.set(x, y, z);
+  if (isKey) rm.visible = false;
+  scene.add(rm);
+  const rec = { item, mesh: rm };
+  pickups.push(rec);
+  if (isKey) keySpots.push({ mesh: rm, label: null });
+  interactables.push({
+    mesh: rm, kind: 'pickup', keyId: item.id,
+    radius: isKey ? KEY_SEE_DIST : (opts.radius || 2.2),
+    aimOnly: isKey,
+    prompt: () => `[E] Pick up ${item.label}`,
+    action: () => {
+      const ii = interactables.findIndex(t => t.mesh === rm);
+      if (ii >= 0) interactables.splice(ii, 1);
+      const pi = pickups.indexOf(rec);
+      if (pi >= 0) pickups.splice(pi, 1);
+      if (isKey) {
+        const ki = keySpots.findIndex(k => k.mesh === rm);
+        if (ki >= 0) keySpots.splice(ki, 1);
+      }
+      scene.remove(rm);
+      if (item.id === 'ball') ball.held = true;
+      giveItem({ ...item });
+      showMsg(item.blurb || `Picked up ${item.label}.`);
+      if (item.id.startsWith('key')) setObj(`Unlock Door with ${item.label}!`);
+    }
+  });
+  return rec;
+}
+
+// --- the throwable ball (the ONLY item you can throw) ------------------------
+// To throw: select the ball in your hotbar (1-9) so you are HOLDING it, aim, and
+// press E while nothing else is in reach (SECTION 10/11 handle that priority).
+// It flies with gravity, bounces off floors/walls/crates and lands as a pickup.
+// Future puzzles can hook this: check ball.hits / add a target.
+const ball = { held: false, thrown: false, mesh: null, vel: new THREE.Vector3(), spin: new THREE.Vector3(), hits: 0 };
+function throwBall() {
+  const idx = inv.slots.findIndex(s => s && s.id === 'ball');
+  if (idx < 0) return false;
+  inv.slots.splice(idx, 1); inv.slots.push(null);   // out of the inventory...
+  if (inv.sel > 8) inv.sel = 8;
+  ball.held = false; renderInv();
+  const m = pickupMesh({ mesh: 'ball' });           // ...and into the air
+  scene.add(m);
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  m.position.copy(camera.position).addScaledVector(dir, 0.7);
+  ball.mesh = m; ball.thrown = true;
+  ball.vel.copy(dir).multiplyScalar(11);
+  ball.vel.y += 2.2;
+  ball.spin.set(Math.random() * 6 - 3, Math.random() * 6 - 3, Math.random() * 6 - 3);
+  showMsg('THROWN! Go fetch it — walk up and press E.');
+  return true;
+}
+function stepBall(dt) {
+  if (!ball.thrown || !ball.mesh) return;
+  ball.vel.y -= 16 * dt; // gravity
+  const p = ball.mesh.position;
+  ball.mesh.rotation.x += ball.spin.x * dt;
+  ball.mesh.rotation.y += ball.spin.y * dt;
+  let nx = p.x + ball.vel.x * dt, ny = p.y + ball.vel.y * dt, nz = p.z + ball.vel.z * dt;
+  // floor bounce
+  if (ny < 0.22) { ny = 0.22; ball.vel.y *= -0.55; ball.vel.x *= 0.8; ball.vel.z *= 0.8; ball.spin.multiplyScalar(0.7); }
+  // wall bounce (building bounds)
+  const minX = LEVELS[0].cx - ROOM_W / 2 + 0.4, maxX = lastRoom.cx + ROOM_W / 2 - 0.4;
+  if (nx < minX || nx > maxX) { ball.vel.x *= -0.6; nx = Math.max(minX, Math.min(maxX, nx)); }
+  if (nz < -ROOM_D / 2 + 0.4 || nz > ROOM_D / 2 - 0.4) { ball.vel.z *= -0.6; nz = Math.max(-ROOM_D / 2 + 0.4, Math.min(ROOM_D / 2 - 0.4, nz)); }
+  // crate / table / prop bounce (reuses the collider boxes)
+  for (const c of colliders) {
+    if (nx > c.minX - 0.2 && nx < c.maxX + 0.2 && nz > c.minZ - 0.2 && nz < c.maxZ + 0.2 && ny < WALL_H) {
+      const dxl = nx - (c.minX - 0.2), dxr = (c.maxX + 0.2) - nx;
+      const dzl = nz - (c.minZ - 0.2), dzr = (c.maxZ + 0.2) - nz;
+      const m = Math.min(dxl, dxr, dzl, dzr);
+      if (m === dxl || m === dxr) ball.vel.x *= -0.6; else ball.vel.z *= -0.6;
+      nx = p.x; nz = p.z; ball.hits++;
+      break;
+    }
+  }
+  p.set(nx, ny, nz);
+  // settled: slow enough and on the floor -> it becomes a pickup again
+  if (ny <= 0.23 && ball.vel.length() < 1.2) {
+    ball.thrown = false;
+    scene.remove(ball.mesh);
+    const landed = { x: p.x, z: p.z };
+    ball.mesh = null;
+    spawnPickup({ id: 'ball', label: 'Bouncy Ball', icon: '⚾', mesh: 'ball',
+      blurb: 'Got your ball back! Select it + E (aimed at nothing) to throw again.' },
+      landed.x, landed.z, { y: 0.3 });
+  }
+}
+
+// --- dropping items (G, or the "Drop (G)" button) ----------------------------
+// Dropped items land a step in front of you and can be picked back up with E.
+function dropSelected() {
+  if (!state.started || state.won || inv.open) return;
+  const item = inv.slots[inv.sel];
+  if (!item) { showMsg('Hotbar slot empty — nothing to drop.'); return; }
+  if (item.id === 'ball' && ball.thrown) return;
+  spawnPickup(item, player.x - Math.sin(player.yaw) * 1.2, player.z - Math.cos(player.yaw) * 1.2);
+  inv.slots.splice(inv.sel, 1); inv.slots.push(null);
+  renderInv();
+  showMsg(`Dropped ${item.label}. Walk over it and press E to pick it back up.`);
+}
+
+// ============================================================================
+// SECTION 7 — PUZZLE TOOLKIT
+// ----------------------------------------------------------------------------
+// Ready-made pieces for building harder puzzles. Nothing here is required by the
+// base game — room 1's keypad stays a joke decoy on purpose.
+//
+// IN-GAME KEYPAD (no browser popups anywhere in this game)
+//   openKeypad({ title, code, onSubmit, onCancel })
+//       Shows the on-screen panel: a 4-digit readout laid out across the top,
+//       starting at 0000, and a 0-9 keypad you can click or type into.
+//       onSubmit(enteredDigits) runs when the player presses ENTER (or the
+//       green ENTER key). onCancel() runs on Esc / CANCEL.
+//   makeLock() and the Room 1 decoy keypad both use this, so every code entry
+//   in the game happens inside the game window.
+//
+// CODE LOCKS + SAFES
+//   makeLock({ id, code, label, mesh, radius, onUnlock })
+//       E prompts for a code; correct code flips state.locks[id].solved.
+//   makeSafe({ id, label, x, y, z, lockCode, contains })
+//       A safe box + dial. Solving its code opens it and spawns `contains`.
+//   Example puzzle (hide the code on a note in an earlier room):
+//       makeSafe({ id: 'safe5', label: 'Safe', x: LEVELS[4].cx + 3.5, y: 0.6, z: -2.5,
+//                  lockCode: '4123', contains: { id: 'gem', label: 'Gem', icon: '💎' } });
+//
+// DECOY GADGETS (used heavily in room 1) — all react physically, none do anything.
+//   decoyBtn(x,y,z,color,name,line)  decoyLever(x,y,z,name,line)
+//   decoySlider(x,y,z,name,line)     decoyDial(x,y,z,name,line)
+// ============================================================================
+// ============================================================================
+const padEl = {
+  panel: document.getElementById('padPanel'),
+  title: document.getElementById('padTitle'),
+  digits: document.getElementById('padDigits'),
+  grid: document.getElementById('padGrid'),
+  err: document.getElementById('padErr'),
+  hint: document.getElementById('padHint'),
+};
+let pad = null;   // { digits:[4], cursor, code, onSubmit, onCancel } while open
+
+// The decoy keypad's reaction to any code, silent and inside the game: the
+// keypad shell itself flashes red once, then fades back. No text box, no
+// speech bubble, no browser dialog — the same "the part moved, that's all"
+// feedback the buttons and levers give you.
+const padFlash = { body: null, t: 0, base: 0x2b3242 };
+function padReject() {
+  if (!padFlash.body) return;
+  padFlash.t = 0.6;
+  padFlash.body.material.color.set(0xff3b3b);
+}
+
+// Draw the four digit boxes (0000 by default) and the 0-9 button grid once.
+(function buildKeypadUI() {
+  for (let i = 0; i < 4; i++) {
+    const d = document.createElement('div');
+    d.className = 'padDigit';
+    d.dataset.i = i;
+    // Clicking a box puts the cursor on that digit, so any of the four can be
+    // edited directly instead of having to type through the ones before it.
+    d.addEventListener('click', e => {
+      e.stopPropagation();
+      if (!pad) return;
+      pad.cursor = i;
+      padEl.err.textContent = '';
+      padRender();
+    });
+    padEl.digits.appendChild(d);
+  }
+  const rows = [
+    ['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'],
+    ['CLEAR', '0', 'ENTER'],
+  ];
+  for (const row of rows) {
+    for (const v of row) {
+      const b = document.createElement('button');
+      b.className = 'padKey' + (v === 'CLEAR' ? ' clear' : v === 'ENTER' ? ' enter' : '');
+      b.textContent = v === 'CLEAR' ? 'CLR' : v;
+      b.type = 'button';
+      b.addEventListener('click', e => { e.stopPropagation(); padPress(v); });
+      padEl.grid.appendChild(b);
+    }
+  }
+})();
+
+function padRender() {
+  if (!pad) return;
+  const boxes = padEl.digits.children;
+  for (let i = 0; i < 4; i++) {
+    boxes[i].textContent = pad.digits[i];
+    boxes[i].classList.toggle('active', i === pad.cursor);
+  }
+}
+// One button press (or one typed key) on the keypad.
+function padPress(v) {
+  if (!pad) return;
+  if (v === 'ENTER') { padSubmit(); return; }
+  if (v === 'CLEAR') { pad.digits = ['0', '0', '0', '0']; pad.cursor = 0; padEl.err.textContent = ''; padRender(); return; }
+  if (v === 'BACK') { padBack(); return; }
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0 || n > 9) return;
+  // Typing overwrites the digit under the cursor, then steps right.
+  pad.digits[pad.cursor] = String(n);
+  pad.cursor = Math.min(3, pad.cursor + 1);
+  padEl.err.textContent = '';
+  padRender();
+}
+function padBack() {
+  if (!pad) return;
+  // step left, and blank the digit we land on (so you can retype it)
+  if (pad.cursor > 0) pad.cursor--;
+  pad.digits[pad.cursor] = '0';
+  padEl.err.textContent = '';
+  padRender();
+}
+// Open the panel. `code` is the expected code (kept for reference/validation).
+function openKeypad({ title = 'Enter Code', code = '', onSubmit, onCancel } = {}) {
+  pad = { digits: ['0', '0', '0', '0'], cursor: 0, code, onSubmit, onCancel };
+  padEl.title.textContent = title;
+  padEl.err.textContent = '';
+  padEl.panel.classList.add('show');
+  padRender();
+  if (document.exitPointerLock) document.exitPointerLock();
+}
+function closeKeypad() {
+  padEl.panel.classList.remove('show');
+  pad = null;
+}
+function padSubmit() {
+  if (!pad) return;
+  const entered = pad.digits.join('');
+  const done = pad.onSubmit;
+  closeKeypad();
+  if (done) done(entered);
+}
+// Keyboard: digits, Backspace, Enter, Escape. Checked first in the global
+// keydown handler so typing a code never moves the player or throws the ball.
+function padKey(e) {
+  if (!pad) return false;
+  if (/^Digit[0-9]$/.test(e.code)) { padPress(e.code.slice(5)); return true; }
+  if (e.code === 'Backspace') { padBack(); return true; }
+  if (e.code === 'Enter' || e.code === 'NumpadEnter') { padSubmit(); return true; }
+  if (e.code === 'Escape') {
+    const cancel = pad.onCancel;
+    closeKeypad();
+    if (cancel) cancel();
+    return true;
+  }
+  return false;
+}
+
+function makeLock({ id, code, label, mesh, radius = 2.4, onUnlock }) {
+  state.locks[id] = state.locks[id] || { solved: false };
+  interactables.push({
+    mesh, kind: 'lock', lockId: id, radius,
+    prompt: () => state.locks[id].solved ? `${label}: UNLOCKED` : `[E] Use ${label}`,
+    action: () => {
+      if (state.locks[id].solved) return;
+      openKeypad({
+        title: label, code,
+        onSubmit: (entered) => {
+          if (entered === String(code)) {
+            state.locks[id].solved = true;
+            showMsg(`${label}: *CLICK* correct!`);
+            if (onUnlock) onUnlock();
+          } else showMsg(`${label}: BZZZT. ${entered} is wrong.`);
+        },
+        onCancel: () => showMsg(`${label}: cancelled.`),
+      });
+    }
+  });
+}
+function makeSafe({ id, label, x, y, z, lockId, lockCode, contains }) {
+  const bodyM = box(1.1, 1.1, 0.8, 0x2a2f3a, x, y, z, true);
+  const dial = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.08, 18),
+    new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.7, roughness: 0.35 }));
+  dial.rotation.x = Math.PI / 2; dial.position.set(x, y + 0.1, z - 0.44); scene.add(dial);
+  label(label.toUpperCase(), x, y + 0.85, z - 0.2, 34, '#ffd75e');
+  state.safes[id] = state.safes[id] || { opened: false };
+  const need = lockId || (id + '_lock');
+  if (!state.locks[need]) {
+    makeLock({ id: need, code: lockCode || '0000', label: label + ' lock', mesh: dial,
+      radius: 2.4,
+      onUnlock: () => {
+        if (state.safes[id].opened) return;
+        state.safes[id].opened = true;
+        bodyM.material.color.set(0x2f7a44);
+        showMsg(`${label} swings open!`);
+        if (contains) spawnPickup(contains, x, z - 1.2);
+      } });
+  }
+}
+
+// --- decoy gadgets: press/pull/slide/turn, nothing opens, and NO speech box ---
+// Pressing one moves the part and nothing else happens: no message box, no text
+// bubble, no sound. The `line` argument is kept in the signatures so the lobby
+// call sites stay unchanged, but it is deliberately unused now.
+//
+// `zDir` is +1 for the north wall (facing +Z) and -1 for the south wall
+// (facing -Z). Every part that sticks out is offset by zDir, so a control on
+// either wall always protrudes into the room and is never buried in the wall.
+function decoyBtn(x, y, z, color, name, line, zDir = 1) {
+  // metal switch housing (NOT a black square — that used to swallow the cap)
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.08),
+    new THREE.MeshStandardMaterial({ color: 0x6f7a8c, metalness: 0.55, roughness: 0.5 }));
+  base.position.set(x, y, z + zDir * 0.04); scene.add(base);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.1, 16),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.35 }));
+  cap.rotation.x = Math.PI / 2 * zDir;
+  cap.position.set(x, y, z + zDir * 0.1); scene.add(cap);
+  const st = { on: false, z, zDir, cap };
+  interactables.push({
+    mesh: cap, kind: 'decoy', radius: 2.4,
+    prompt: () => `[E] Press ${name}`,
+    action: () => {
+      // the cap physically depresses into the housing and lights up green
+      st.on = !st.on;
+      cap.material.color.set(st.on ? 0x7dff9e : color);
+      cap.position.z = z + zDir * (st.on ? 0.07 : 0.1);
+    }
+  });
+}
+// A wall lever: a short shaft that sticks out from the wall, pivoting at its
+// base so it swings up and down between the two positions. `zDir` is +1 for the
+// north wall (facing +Z) and -1 for the south wall (facing -Z), so the shaft
+// always juts out into the room instead of into the wall.
+function decoyLever(x, y, z, name, line, zDir = 1) {
+  const metal = new THREE.MeshStandardMaterial({ color: 0x8a94a6, metalness: 0.7, roughness: 0.35 });
+  // back plate sits flat on the wall
+  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.6, 0.06), metal);
+  plate.position.set(x, y, z); scene.add(plate);
+  // pivot: the arm swings in the YZ plane (up/down) exactly like a real switch
+  const pivot = new THREE.Group();
+  pivot.position.set(x, y - 0.2, z + zDir * 0.05);
+  scene.add(pivot);
+  const boss = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.2, 12), metal);
+  boss.rotation.z = Math.PI / 2;          // hinge axis along X
+  pivot.add(boss);
+  // the arm: a shaft pointing out of the wall (+zDir), tipped up or down
+  const arm = new THREE.Group();
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.5, 10), metal);
+  shaft.rotation.x = Math.PI / 2;         // cylinder axis (Y) -> Z
+  shaft.position.z = zDir * 0.25;
+  arm.add(shaft);
+  const grip = new THREE.Mesh(new THREE.SphereGeometry(0.085, 12, 10),
+    new THREE.MeshStandardMaterial({ color: 0xcc3333, roughness: 0.4 }));
+  grip.position.z = zDir * 0.52;           // knob at the free end
+  arm.add(grip);
+  pivot.add(arm);
+  // rest angle = arm tipped up ~30 degrees; thrown = tipped down ~30 degrees.
+  // The sign flip on x makes the arm point UP in world space on both the north
+  // wall (zDir +1) and the south wall (zDir -1).
+  const UP = -0.52, DOWN = 0.52;
+  arm.rotation.x = UP * zDir;
+  const st = { on: false, target: UP };
+  interactables.push({
+    mesh: grip, kind: 'decoy', radius: 2.4,
+    prompt: () => `[E] Pull ${name}`,
+    action: () => {
+      st.on = !st.on;
+      st.target = st.on ? DOWN : UP;
+      // no speech box: the arm swinging is the whole feedback
+    }
+  });
+  // Smoothly animate toward the target angle. Levers are the one thing in room 1
+  // that move on their own — a short throw, not an endless wobble.
+  levers.push({ arm, st, zDir, UP, DOWN });
+}
+function decoySlider(x, y, z, name, line, zDir = 1) {
+  const track = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.1, 0.08),
+    new THREE.MeshStandardMaterial({ color: 0x59637a, metalness: 0.5, roughness: 0.55 }));
+  track.position.set(x, y, z + zDir * 0.04); scene.add(track);
+  const ks = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.2, 0.12),
+    new THREE.MeshStandardMaterial({ color: 0x7df9ff, roughness: 0.4 }));
+  ks.position.set(x - 0.2, y, z + zDir * 0.11); scene.add(ks);   // knob sits proud of the track
+  const st = { v: 0, z, zDir };
+  interactables.push({
+    mesh: ks, kind: 'decoy', radius: 2.4,
+    prompt: () => `[E] Slide ${name}`,
+    action: () => {
+      st.v = (st.v + 1) % 4;
+      ks.position.x = x - 0.2 + st.v * 0.14;
+    }
+  });
+}
+function decoyDial(x, y, z, name, line, zDir = 1) {
+  const face = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.08, 20),
+    new THREE.MeshStandardMaterial({ color: 0x59637a, metalness: 0.5, roughness: 0.55 }));
+  face.rotation.x = Math.PI / 2 * zDir;
+  face.position.set(x, y, z + zDir * 0.04); scene.add(face);
+  const needle = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.24, 0.03),
+    new THREE.MeshStandardMaterial({ color: 0xff5555 }));
+  needle.position.set(x, y, z + zDir * 0.1); scene.add(needle);  // needle proud of the dial face
+  const st = { a: 0 };
+  interactables.push({
+    mesh: needle, kind: 'decoy', radius: 2.4,
+    prompt: () => `[E] Turn ${name}`,
+    action: () => {
+      st.a = (st.a + 1) % 8;
+      needle.rotation.z = -st.a * Math.PI / 4;
+    }
+  });
+}
+
+// ============================================================================
+// SECTION 8 — LEVEL 1: THE LOBBY          <-- EDIT ROOM 1 HERE
+// ----------------------------------------------------------------------------
+// Design intent: overwhelm. Around twenty decoy gadgets that ALL do nothing
+// (buttons, levers, sliders, dials, a fake keypad), six do-nothing junk pickups,
+// and the throwable ball.
+//
+// NO SIGNAGE: room 1 has no wall text at all — no posters, no floating labels,
+// not even the room-name banner (see LEVELS[0].noSign in SECTION 1). The only
+// text the player sees here is HUD feedback such as "[E] Press RED BTN".
+//
+// THE KEY: Key 1 is tiny (35% scale), dull grey, unlabeled, on the floor in the
+// north-east corner behind a crate. No table, no glow, no hint.
+//
+// HOW TO EDIT
+//   add a gadget ... copy any decoyBtn / decoyLever / decoySlider / decoyDial line
+//   add junk ....... copy a line inside the JUNK array
+//   move the key ... change the kx / kz lines at the bottom of decorateLobby()
+//   add a puzzle ... use the SECTION 7 toolkit, e.g. makeSafe({ ... }) in here
+// ============================================================================
+function decorateLobby(lv) {
+  const cx = lv.cx, hd = ROOM_D / 2, hw = ROOM_W / 2;
+  const nz = -hd + WALL_T / 2 + 0.08;      // north wall surface
+  const sz = hd - WALL_T / 2 - 0.08;       // south wall surface
+  const wx = cx - hw + WALL_T / 2 + 0.08;  // west wall surface
+
+  // ---- NORTH WALL: three buttons, a slider, a lever, a dial -----------------
+  decoyBtn(cx - 3.4, 1.6, nz, 0xcc3333, 'RED BTN', 'a buzzer sounds. Nothing opens.');
+  decoyBtn(cx - 2.2, 1.6, nz, 0x33cc55, 'GRN BTN', 'a happy chime! The door ignores it.');
+  decoyBtn(cx - 1.0, 1.6, nz, 0x3388ff, 'BLU BTN', '...echo... the room is unimpressed.');
+  decoySlider(cx + 0.4, 1.6, nz, 'POWER', 'lights flicker. Loose bulb. Probably.');
+  decoyLever(cx + 1.8, 1.5, nz, 'LEVER A', 'a distant clunk. Just the pipes.');
+  decoyDial(cx + 3.1, 1.6, nz, 'DIAL', 'full spin. Impressive. Useless.');
+
+  // ---- SOUTH WALL: lever, gauge, two buttons, slider, lever -----------------
+  decoyLever(cx - 3.2, 1.5, sz, 'LEVER B', 'grinding gears... which stop. Rude.', -1);
+  decoyDial(cx - 1.9, 1.6, sz, 'GAUGE', 'the needle wobbles and gives up.', -1);
+  decoyBtn(cx - 0.6, 1.6, sz, 0xddcc33, 'YEL BTN', 'a sad trombone plays. No help.', -1);
+  decoyBtn(cx + 0.7, 1.6, sz, 0xdd3322, 'BIG RED', 'sirens! ...kidding. A tiny squeak.', -1);
+  decoySlider(cx + 2.0, 1.6, sz, 'FREQ', 'static. No hidden message. Or is there? No.', -1);
+  decoyLever(cx + 3.3, 1.5, sz, 'LEVER C', 'feels important. It is not.', -1);
+
+  // ---- WEST WALL: fake keypad (there is no code) ----------------------------
+  // E opens the in-game keypad panel: a 4-digit readout starting at 0000 that
+  // you can edit by clicking the digits or typing — no browser popup anywhere.
+  // Submitting flashes the readout red inside the panel — no message box, no
+  // popup, nothing outside the game.
+  const padBody = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.4),
+    new THREE.MeshStandardMaterial({ color: 0x2b3242, roughness: 0.5 }));
+  padBody.position.set(wx + 0.05, 1.5, -2.6); scene.add(padBody);
+  padFlash.body = padBody;   // any code entered makes this shell flash red once
+  interactables.push({
+    mesh: padBody, kind: 'decoy', radius: 2.2,
+    prompt: () => '[E] Use keypad',
+    action: () => openKeypad({ title: 'Keypad', onSubmit: () => padReject() })
+  });
+
+  // ---- ceiling: six flickering lights ---------------------------------------
+  for (let i = 0; i < 6; i++) {
+    const l = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6),
+      new THREE.MeshBasicMaterial({ color: [0xff5555, 0x55ff55, 0x5555ff][i % 3] }));
+    l.position.set(cx - 3.5 + i * 1.4, WALL_H - 0.15, 0); scene.add(l);
+    decoys.push({ mesh: l, phase: i * 0.9 });
+  }
+
+  // ---- floor clutter (solid, so the room feels crowded) ---------------------
+  box(0.9, 0.9, 0.9, 0x4a3a22, cx - 2.6, 0.45, 2.4);   // crate
+  box(0.7, 0.7, 0.7, 0x3a2f1a, cx - 1.7, 0.35, 2.6);   // small crate
+  box(0.8, 1.4, 0.8, 0x2f3a4a, cx + 2.8, 0.7, 2.5);    // tall cabinet
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.1, 14),
+    new THREE.MeshStandardMaterial({ color: 0x5a2a2a, roughness: 0.8 }));
+  barrel.position.set(cx + 3.6, 0.55, -2.6); scene.add(barrel);
+  colliders.push({ minX: cx + 3.2, maxX: cx + 4.0, minZ: -3.0, maxZ: -2.2 });
+
+  // ---- junk pickups: six items that do absolutely nothing -------------------
+  // Same spawnPickup() system that real puzzle loot will use (SECTION 6).
+  const JUNK = [
+    { id: 'junk_mug', label: 'Chipped Mug', icon: '☕', mesh: 'bottle', color: 0x887755, x: cx - 3.6, z: 2.9, blurb: 'Chipped Mug. Smells like old coffee. Useless.' },
+    { id: 'junk_book', label: 'Dusty Book', icon: '📕', mesh: 'book', color: 0x8a2f2f, x: cx - 1.2, z: 1.4, blurb: 'Dusty Book. Page 1: "definitely no clues here".' },
+    { id: 'junk_rock', label: 'Pet Rock', icon: '🪨', mesh: 'junk', color: 0x777777, x: cx + 1.1, z: 2.8, blurb: 'Pet Rock. He believes in you. He does nothing.' },
+    { id: 'junk_cube', label: 'Weird Cube', icon: '🧊', mesh: 'cube', color: 0x557799, x: cx + 2.2, z: -1.2, blurb: 'Weird Cube. Cool to hold. Solves nothing.' },
+    { id: 'junk_duck', label: 'Rubber Duck', icon: '🦆', mesh: 'junk', color: 0xffcc33, x: cx - 0.4, z: -3.0, blurb: 'Rubber Duck. Squeak. (It judges your progress.)' },
+    { id: 'junk_bottle', label: 'Empty Bottle', icon: '🍾', mesh: 'bottle', color: 0x338866, x: cx + 3.9, z: 1.1, blurb: 'Empty Bottle. Could hold something. It holds air.' },
+  ];
+  for (const j of JUNK) spawnPickup(j, j.x, j.z);
+
+  // ---- the throwable ball (see SECTION 6: hold it, aim, press E) ------------
+  spawnPickup({ id: 'ball', label: 'Bouncy Ball', icon: '⚾', mesh: 'ball',
+    blurb: 'Bouncy Ball! Select it in your hotbar (1-9), aim, and press E to THROW. G drops.' },
+    cx - 2.9, 0.6, { y: 0.5 });
+
+  // ---- KEY 1: tiny, dull, unlabeled, NE floor corner behind a crate ---------
+  const kx = cx + hw - 0.9, kz = -hd + 0.9;
+  box(0.7, 0.7, 0.7, 0x4a3a22, kx - 0.35, 0.35, kz + 0.35);  // crate that hides it
+  spawnKey({ kd: ITEMS[0], x: kx, z: kz, y: 0, scale: 0.35, color: 0x5a5a55, sign: false });
+}
+ROOM_DECORATORS[0] = decorateLobby;   // room index 0 uses this instead of the default
+
+// --- build the contents of every room (all decorators are registered by now) --
+LEVELS.forEach((lv, i) => decorateRoom(i, lv));
+
+// ============================================================================
+// SECTION 9 — HUD & INVENTORY (Minecraft-style)
+// ----------------------------------------------------------------------------
+// 36 slots: 0-8 are the hotbar (bottom of the screen, selected with 1-9), 9-35
+// are the backpack cells shown in the Q panel. Items move by dragging a slot, or
+// by clicking one slot then clicking another to swap them.
+// ============================================================================
+let dragIdx = -1;   // slot index currently picked up for a drag / click-swap
+function renderInv() {
+  // hotbar (slots 0-8) — number key in the corner, short label under the icon
+  elHotbar.innerHTML = '';
+  for (let i = 0; i < 9; i++) {
+    const s = inv.slots[i];
+    const d = document.createElement('div');
+    d.className = 'slot' + (i === inv.sel ? ' sel' : '') + (dragIdx === i ? ' dragging' : '');
+    d.dataset.idx = i;
+    d.draggable = !!s;
+    d.innerHTML = `<span class="num">${i + 1}</span><span class="ic">${s ? s.icon : ''}</span><span class="nm">${s ? shortLabel(s.label) : ''}</span>`;
+    d.title = s ? `${s.label} — drag to move, click another slot to swap` : `Empty slot ${i + 1}`;
+    attachSlotDnD(d, i);
+    elHotbar.appendChild(d);
+  }
+  // backpack (slots 9-35) lives inside the Q panel
+  elInvGrid.innerHTML = '';
+  inv.slots.forEach((s, i) => {
+    const c = document.createElement('div');
+    c.className = 'cell' + (s ? ' full' : '') + (dragIdx === i ? ' dragging' : '');
+    c.dataset.idx = i;
+    c.draggable = !!s;
+    c.innerHTML = s ? `<span>${s.icon}</span><span class="cl">${shortLabel(s.label)}</span>` : '';
+    c.title = s ? `${s.label} — drag to move, click another slot to swap` : `Empty slot ${i + 1}`;
+    attachSlotDnD(c, i);
+    elInvGrid.appendChild(c);
+  });
+  const names = inv.slots.filter(Boolean).map(s => s.label);
+  setInv(names.length ? 'Inventory: ' + names.join(', ') : 'Inventory: (empty) (Q to open, drag to rearrange)');
+}
+// Drag-and-drop, plus a click-one-then-click-another fallback for trackpads.
+function attachSlotDnD(el, i) {
+  el.addEventListener('dragstart', e => { dragIdx = i; e.dataTransfer.effectAllowed = 'move'; });
+  el.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+  el.addEventListener('drop', e => {
+    e.preventDefault();
+    if (dragIdx < 0 || dragIdx === i) return;
+    const t = inv.slots[dragIdx]; inv.slots[dragIdx] = inv.slots[i]; inv.slots[i] = t;
+    dragIdx = -1; renderInv();
+  });
+  el.addEventListener('click', e => {
+    e.stopPropagation();
+    if (dragIdx < 0) { if (inv.slots[i]) dragIdx = i; }
+    else {
+      const t = inv.slots[dragIdx]; inv.slots[dragIdx] = inv.slots[i]; inv.slots[i] = t;
+      dragIdx = -1; renderInv();
+    }
+    if (i < 9) { inv.sel = i; renderInv(); }
+  });
+}
+// The "Drop (G)" HUD button — created once, next to the hotbar.
+function ensureDropButton() {
+  if (document.getElementById('dropBtn')) return;
+  const dropBtn = document.createElement('button');
+  dropBtn.id = 'dropBtn';
+  dropBtn.textContent = 'Drop (G)';
+  document.getElementById('hud').appendChild(dropBtn);
+  dropBtn.addEventListener('click', e => { e.stopPropagation(); dropSelected(); });
+}
+// Put an item into the first empty slot and select it.
+function giveItem(item) {
+  const i = inv.slots.findIndex(s => !s);
+  if (i >= 0) { inv.slots[i] = item; inv.sel = Math.min(i, 8); }
+  renderInv();
+}
+// Short tag drawn inside a slot: "Key 1" -> "K1" (full name stays in the tooltip).
+function shortLabel(label) {
+  const m = /key\s*(\d+)/i.exec(label || '');
+  if (m) return 'K' + m[1];
+  const words = String(label || '').split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return (words[0][0] + words[1].slice(0, 3)).toUpperCase().slice(0, 5);
+  return String(label || '').slice(0, 6);
+}
+// "key3" -> "Key 3", for door prompts and messages.
+function needLabel(keyId) {
+  const m = /key\s*(\d+)/i.exec(keyId || '');
+  return m ? 'Key ' + m[1] : keyId;
+}
+// The inventory is the one and only place that knows which keys you hold, so
+// doors, prompts and pickups all ask this question instead of keeping a copy.
+function haveKey(id) { return inv.slots.some(s => s && s.id === id); }
+// Remove an item by id — used when a door swallows a key. Slots stay gapless.
+function consumeItem(id) {
+  const i = inv.slots.findIndex(s => s && s.id === id);
+  if (i >= 0) {
+    inv.slots.splice(i, 1);
+    inv.slots.push(null);
+    if (inv.sel > 8) inv.sel = 8;
+  }
+  renderInv();
+}
+// Open/close the inventory panel. Closing re-locks the mouse for you.
+function toggleInv(force) {
+  inv.open = force !== undefined ? force : !inv.open;
+  elInvPanel.classList.toggle('show', inv.open);
+  if (inv.open && document.exitPointerLock) document.exitPointerLock();
+  else if (!inv.open && state.started && !state.won) tryLock();
+}
+renderInv();
+ensureDropButton();
+
+
+
+
+
+
+
+
+
+// ============================================================================
+// SECTION 10 — INPUT (player, WASD, mouse look, pointer lock, hotkeys)
+// ----------------------------------------------------------------------------
+// WASD moves relative to where you are looking, so the controls always feel
+// right no matter which way you face. E interacts (or throws the ball).
+// ============================================================================
+const player = { x: LEVELS[0].cx - 2.5, z: 0, yaw: -Math.PI / 2, pitch: 0, r: 0.35, speed: 4.2 };
+camera.position.set(player.x, 1.65, player.z);
+const keysDown = {};
+let locked = false;
+let dragging = false;   // fallback "look" mode when pointer lock is unavailable
+
+// Pointer lock is wrapped: on browsers/contexts where it is missing or refused
+// (some Safari versions, embedded views) the game still starts and you look
+// around by holding the left mouse button and dragging instead.
+function tryLock() {
+  const el = renderer.domElement;
+  const fn = el.requestPointerLock || el.mozRequestPointerLock || el.webkitRequestPointerLock;
+  if (!fn) return false;
+  try { fn.call(el); return true; } catch (e) { return false; }
+}
+renderer.domElement.addEventListener('mousedown', () => { if (!locked) dragging = true; });
+addEventListener('mouseup', () => { dragging = false; });
+
+addEventListener('keydown', e => {
+  // The in-game keypad gets first refusal on every key, so typing a code never
+  // moves the player, opens the inventory, or throws the ball.
+  if (padKey(e)) { e.preventDefault(); return; }
+  keysDown[e.code] = true;
+  if (e.code === 'KeyQ') { if (state.started && !state.won) toggleInv(); return; }
+  if (e.code === 'KeyG') { dropSelected(); return; }
+  if (e.code === 'KeyE' && inv.open) { toggleInv(false); return; }   // E also closes the panel
+  if (e.code === 'KeyE') {
+    // Throw has priority only when the ball is held AND nothing is in reach.
+    const sel = inv.slots[inv.sel];
+    if (sel && sel.id === 'ball' && !target()) { doThrowHeld(); return; }
+    doInteract();
+  }
+  if (/^Digit[1-9]$/.test(e.code)) { inv.sel = +e.code.slice(5) - 1; renderInv(); }
+});
+addEventListener('keyup', e => keysDown[e.code] = false);
+
+document.addEventListener('pointerlockchange', () => {
+  locked = document.pointerLockElement === renderer.domElement;
+});
+document.addEventListener('mousemove', e => {
+  if (!state.started || state.won) return;
+  if (!locked && !dragging) return;
+  player.yaw -= e.movementX * 0.0024;
+  player.pitch = Math.max(-1.35, Math.min(1.35, player.pitch - e.movementY * 0.0024));
+});
+// Click to play: start the game FIRST, then ask for pointer lock. Pointer lock
+// needs a user gesture, and if it is refused the game must still run.
+document.getElementById('playBtn').onclick = () => {
+  document.getElementById('overlay').classList.add('hidden');
+  state.started = true; state.t0 = performance.now();
+  tryLock();
+};
+renderer.domElement.addEventListener('click', () => {
+  if (state.started && !state.won && !locked) tryLock();
+});
+document.getElementById('againBtn').onclick = () => location.reload();
+
+
+// ============================================================================
+// SECTION 11 — COLLISION, INTERACTION & MAIN LOOP
+// ----------------------------------------------------------------------------
+// PUZZLE HOOK: interaction is "nearest interactable within its radius wins".
+// To add behaviour for a new object, push an entry into `interactables` with a
+// prompt() and an action() — that is all a new puzzle needs.
+// ============================================================================
+// Solid-box collision: the player is a small radius, checked axis by axis so you
+// slide along walls instead of sticking to them.
+function hitsWall(x, z) {
+  for (const c of colliders) {
+    if (x + player.r > c.minX && x - player.r < c.maxX && z + player.r > c.minZ && z - player.r < c.maxZ) return true;
+  }
+  return false;
+}
+function worldPos(o) { const v = new THREE.Vector3(); o.getWorldPosition(v); return v; }
+// --- targeting: WHAT THE CROSSHAIR POINTS AT --------------------------------
+// Interaction is aim-based, not just proximity:
+//   1) raycast from the centre of the screen against interactable meshes
+//      -> whatever your crosshair is literally pointing at wins
+//   2) if you are aiming at nothing, fall back to the closest thing in range
+//      (so you can still grab the ball at your feet without staring at it).
+//      Keys opt out with aimOnly: they must be aimed at directly, so you cannot
+//      grab one from across the room just by standing next to it.
+function eligible(it) {
+  if (it.mesh.visible === false) return false;      // you cannot use what you cannot see
+  if (it.kind === 'key' && haveKey(it.keyId)) return false;
+  if (it.kind === 'pickup' && it.keyId === 'ball' && ball.thrown) return false;
+  if (it.kind === 'door' && state.doorsOpen.has(it.doorIdx)) return false;
+  return true;
+}
+function nearest(list) {
+  let best = null, bd = 1e9;
+  for (const it of (list || interactables)) {
+    if (!eligible(it)) continue;
+    if (it.aimOnly) continue;               // aim-only things never win by proximity
+    const p = worldPos(it.mesh);
+    const d = Math.hypot(p.x - player.x, p.z - player.z);
+    if (d < it.radius && d < bd) { bd = d; best = it; }
+  }
+  return best;
+}
+const aimRay = new THREE.Raycaster();
+const AIM_CENTER = new THREE.Vector2(0, 0);
+function aimed(list) {
+  camera.updateMatrixWorld();
+  // Raycasting uses matrixWorld, and three.js does NOT refresh it for us. Objects
+  // created this frame (a key you just dropped, a ball that just landed) would
+  // otherwise be raycast at their stale/identity transform and be impossible to
+  // aim at until some later render happened to fix it.
+  scene.updateMatrixWorld();
+  aimRay.setFromCamera(AIM_CENTER, camera);
+  aimRay.far = 8;
+  const hits = aimRay.intersectObjects(list.map(it => it.mesh), true);
+  if (!hits.length) return null;
+  const owner = new Map();
+  for (const it of list) owner.set(it.mesh, it);
+  let o = hits[0].object;
+  while (o && !owner.has(o)) o = o.parent;   // climb to the interactable's root mesh
+  if (!o) return null;
+  const it = owner.get(o);
+  const p = worldPos(it.mesh);
+  return Math.hypot(p.x - player.x, p.z - player.z) <= it.radius ? it : null;
+}
+function target() {
+  const list = interactables.filter(eligible);
+  return aimed(list) || nearest(list);
+}
+function doInteract() {
+  if (!state.started || state.won) return;
+  const it = target();
+  if (it) it.action();
+}
+// E while holding the ball and facing nothing = throw it (SECTION 6).
+function doThrowHeld() {
+  if (!state.started || state.won || inv.open) return;
+  if (ball.thrown) { showMsg('Ball is already flying!'); return; }
+  throwBall();
+}
+
+// HUD state for whatever the crosshair is on: the plain white dot stays as it
+// is; the prompt text below it tells you what E will do. Split out of tick() so
+// it is easy to reason about (and to unit-test). Returns the current target,
+// or null.
+function updateHudPrompt() {
+  const it = target();
+  if (it) {
+    const t = it.prompt();
+    if (t) { elPrompt.textContent = t; elPrompt.classList.remove('throw'); elPrompt.style.display = 'block'; }
+    else { elPrompt.style.display = 'none'; }
+    return it;
+  }
+  // Holding the ball and aiming at nothing? Say how to throw it.
+  const held = inv.slots[inv.sel];
+  if (held && held.id === 'ball' && !ball.thrown && !inv.open) {
+    elPrompt.textContent = 'Press E to throw';
+    elPrompt.classList.add('throw');
+    elPrompt.style.display = 'block';
+  } else {
+    elPrompt.classList.remove('throw');
+    elPrompt.style.display = 'none';
+  }
+  return null;
+}
+
+const clock = new THREE.Clock();
+function tick() {
+  requestAnimationFrame(tick);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (state.started && !state.won) {
+    // --- camera from mouse look ---
+    camera.rotation.order = 'YXZ';
+    camera.rotation.y = player.yaw; camera.rotation.x = player.pitch;
+    // --- WASD, relative to where you are looking ---
+    let mx = 0, mz = 0;
+    if (keysDown.KeyW) mz += 1; if (keysDown.KeyS) mz -= 1;
+    if (keysDown.KeyA) mx -= 1; if (keysDown.KeyD) mx += 1;
+    if (mx || mz) {
+      const len = Math.hypot(mx, mz); mx /= len; mz /= len;
+      const sin = Math.sin(player.yaw), cos = Math.cos(player.yaw);
+      const fx = -sin, fz = -cos;   // forward (where the camera faces)
+      const rx = cos,  rz = -sin;   // right
+      const vx = (fx * mz + rx * mx) * player.speed * dt;
+      const vz = (fz * mz + rz * mx) * player.speed * dt;
+      const nx = player.x + vx;
+      if (!hitsWall(nx, player.z)) player.x = nx;
+      const nz = player.z + vz;
+      if (!hitsWall(player.x, nz)) player.z = nz;
+    }
+    // --- keep the player inside the building ---
+    const minX = LEVELS[0].cx - ROOM_W / 2 + 0.5, maxX = lastRoom.cx + ROOM_W / 2 - 0.5;
+    player.x = Math.max(minX, Math.min(maxX, player.x));
+    player.z = Math.max(-ROOM_D / 2 + 0.5, Math.min(ROOM_D / 2 - 0.5, player.z));
+    camera.position.set(player.x, 1.65, player.z);
+    // --- animation: levers swing up/down, the ball in flight moves, the
+    //     ceiling lights flicker. Keys, junk, buttons and everything else sit still ---
+    stepBall(dt);
+    for (const lv of levers) {
+      const want = lv.st.target * lv.zDir;
+      lv.arm.rotation.x += (want - lv.arm.rotation.x) * Math.min(1, dt * 14);
+    }
+    const tNow = performance.now() * 0.004;
+    for (const d of decoys) { d.mesh.visible = (Math.sin(tNow + d.phase) > -0.2); }
+    // Keys reveal themselves only when close AND looked straight at.
+    updateKeyVisibility();
+    // fade the keypad's red flash back to its resting colour
+    if (padFlash.t > 0 && padFlash.body) {
+      padFlash.t = Math.max(0, padFlash.t - dt);
+      const k = padFlash.t / 0.6;                     // 1 right after submitting -> 0
+      padFlash.body.material.color.set(padFlash.base).lerp(new THREE.Color(0xff3b3b), k);
+    }
+    // --- HUD: crosshair target / prompt / current room ---
+    updateHudPrompt();
+    let ri = 0, bd = 1e9;
+    LEVELS.forEach((lv, i) => { const d = Math.abs(player.x - lv.cx); if (d < bd) { bd = d; ri = i; } });
+    elRoom.textContent = LEVELS[ri].name;
+  }
+  renderer.render(scene, camera);
+}
+tick();
+
+// ===== INJECTED SMOKE TEST (temp file only) =====
+const R = [];
+const ok = (c, m) => R.push((c ? 'PASS: ' : 'FAIL: ') + m);
+try {
+  // any use of a browser popup would throw and fail the suite
+  window.prompt = () => { throw new Error('browser prompt() was used'); };
+  state.started = true;   // dropSelected()/pointer-lock guards expect a live game
+  const hw = ROOM_W / 2, lo1 = LEVELS[0].cx - hw, hi1 = LEVELS[0].cx + hw;
+
+  // 1. structure
+  ok(LEVELS.length === 13, '13 rooms built (' + LEVELS.length + ')');
+  ok(Object.keys(doorMeshes).length === 12, '12 chained doors (' + Object.keys(doorMeshes).length + ')');
+  ok(ITEMS.length === 12, '12 keys defined (' + ITEMS.length + ')');
+  // runtime health: THREE loaded, no uncaught errors, loop rendered, nothing NaN
+  ok(window.__loadErr.length === 0, 'no page/script load errors (' + window.__loadErr.join('|') + ')');
+  ok(typeof THREE !== 'undefined' && !!renderer, 'three.js loaded (local three.min.js, r' + THREE.REVISION + ') and renderer created');
+  ok(scene.children.length > 100, 'scene built with ' + scene.children.length + ' top-level objects');
+  ok(Number.isFinite(camera.position.x) && Number.isFinite(player.x), 'camera/player positions are finite');
+  ok(colliders.length >= 140, 'collision boxes registered (' + colliders.length + ')');
+
+  // 2. room 1 must be completely signage-free (count 3D label planes in room 1)
+  let labelsInR1 = 0, labelsTotal = 0;
+  scene.traverse(o => {
+    if (o.isMesh && o.geometry && o.geometry.type === 'PlaneGeometry' && o.material && o.material.map) {
+      labelsTotal++;
+      if (o.position.x >= lo1 && o.position.x <= hi1) labelsInR1++;
+    }
+  });
+  ok(labelsInR1 === 0, 'room 1 has ZERO signage labels (found ' + labelsInR1 + ')');
+  ok(labelsTotal > 0, 'other rooms still labeled (' + labelsTotal + ' label planes total)');
+
+  // 3. room 1 clutter counts
+  const inR1 = t => t.mesh.position.x >= lo1 && t.mesh.position.x <= hi1;
+  const decoyN = interactables.filter(t => t.kind === 'decoy' && inR1(t)).length;
+  ok(decoyN === 14, 'room 1 decoy gadgets = 14 (' + decoyN + ')');
+  ok(decoys.length === 6, 'room 1 blinking ceiling lights = 6 (' + decoys.length + ')');
+  const pn = pickups.filter(p => inR1(p)).length;
+  ok(pn === 7, 'room 1 pickups = 7 (6 junk + ball) (' + pn + ')');
+
+  // 3b. every room shares ONE green floor colour, and every ceiling lamp has a
+  //     readable grey/brown shade (not a white blob that blows out under light).
+  const floors = [];
+  scene.traverse(o => {
+    if (o.isMesh && o.geometry && o.geometry.type === 'PlaneGeometry'
+        && Math.abs(o.rotation.x + Math.PI / 2) < 0.01) floors.push(o);
+  });
+  ok(floors.length === LEVELS.length, 'one floor plane per room (' + floors.length + '/' + LEVELS.length + ')');
+  const floorHexes = [...new Set(floors.map(f => f.material.color.getHex()))];
+  ok(floors.length === LEVELS.length && floorHexes.length === 1,
+     'all room floors are the same colour (' + floorHexes.map(h => '0x' + h.toString(16)).join(',') + ')');
+  ok(floorHexes.length === 1 && floorHexes[0] === FLOOR_COLOR && FLOOR_COLOR === 0x1e4a2e,
+     'shared floor colour is the dark green 0x1e4a2e (old room-3 green)');
+  // green, not grey/red/blue: green channel must clearly dominate
+  const fc = new THREE.Color(FLOOR_COLOR);
+  ok(fc.g > fc.r && fc.g > fc.b, 'floor colour actually reads green (r' + fc.r.toFixed(2) + ' g' + fc.g.toFixed(2) + ' b' + fc.b.toFixed(2) + ')');
+  // lamp shades: the 0.7 x 0.15 x 0.7 box under each ceiling light
+  const shades = [];
+  scene.traverse(o => {
+    if (!o.isMesh || !o.geometry || o.geometry.type !== 'BoxGeometry') return;
+    const g = o.geometry.parameters;
+    if (Math.abs(g.width - 0.7) < 1e-6 && Math.abs(g.height - 0.15) < 1e-6) shades.push(o);
+  });
+  ok(shades.length === LEVELS.length, 'one lamp shade per room (' + shades.length + '/' + LEVELS.length + ')');
+  // NOTE: read the hex (display/sRGB bytes), not THREE.Color.r — three.js stores
+  // component values in LINEAR space, so a mid-grey reports ~0.27 there, not 0.57.
+  const sh = LAMP_SHADE, shB = [(sh >> 16) & 255, (sh >> 8) & 255, sh & 255];
+  const shSpread = (Math.max(...shB) - Math.min(...shB)) / 255;
+  const shBright = (shB[0] + shB[1] + shB[2]) / 765;
+  ok(shSpread < 0.06 && shBright > 0.3 && shBright < 0.8,
+     'lamp shade is a recognisable mid grey/brown (spread ' + shSpread.toFixed(3) + ', brightness ' + shBright.toFixed(2) + ')');
+  const shadeHexes = [...new Set(shades.map(s => s.material.color.getHex()))];
+  ok(shades.length === LEVELS.length && shadeHexes.length === 1 && shadeHexes[0] === LAMP_SHADE,
+     'every lamp shade uses the shared grey colour');
+
+
+  // 4. every decoy reacts without throwing (incl. the fake keypad), and NONE of
+  //    them prints a message box — the moving part is the only feedback.
+  let decoyErr = 0, decoySpeech = 0;
+  for (const t of interactables.filter(t => t.kind === 'decoy' && inR1(t))) {
+    try { t.action(); if (!t.prompt()) decoyErr++; } catch (e) { decoyErr++; }
+    if (elMsg.style.display === 'block') decoySpeech++;   // showMsg() would show it
+  }
+  ok(decoyErr === 0, 'all room-1 decoys respond to E with no errors');
+  ok(decoySpeech === 0, 'no speech/message box for any button, lever, slider or dial (' + decoySpeech + ' shown)');
+
+  // 4b. in-game keypad panel: 4 digits across, default 0000, editable in-game,
+  //     no browser prompt. (The keypad decoy's action() above left it open.)
+  ok(document.getElementById('padPanel').classList.contains('show'), 'keypad decoy opened the in-game panel (no browser popup)');
+  ok(padEl.digits.children.length === 4, 'keypad shows 4 digit boxes across');
+  ok([...padEl.digits.children].map(d => d.textContent).join('') === '0000', 'keypad default entry is 0000');
+  ['1', '2', '3', '4'].forEach(v => padPress(v));
+  ok([...padEl.digits.children].map(d => d.textContent).join('') === '1234', 'entered digits 1234 show in the readout');
+  padBack();
+  ok([...padEl.digits.children].map(d => d.textContent).join('') === '1204', 'Backspace steps back and clears that digit ("' + [...padEl.digits.children].map(d => d.textContent).join('') + '")');
+  padPress('5');
+  ok([...padEl.digits.children].map(d => d.textContent).join('') === '1254', 'retype after Backspace works');
+  padPress('CLEAR');
+  ok([...padEl.digits.children].map(d => d.textContent).join('') === '0000', 'CLR resets to 0000');
+  const typed = [];
+  [1,2,3,4].forEach(n => typed.push(padKey({ code: 'Digit' + n, preventDefault(){} })));
+  ok(typed.every(Boolean), 'typing digits is captured by the keypad');
+  ok(padKey({ code: 'Enter', preventDefault(){} }) && pad === null && !document.getElementById('padPanel').classList.contains('show'), 'ENTER submits and closes the panel');
+  ok(padFlash.t > 0 && padFlash.body.material.color.getHex() === 0xff3b3b, 'decoy keypad flashes its own shell red instead of printing a message');
+  ok(elMsg.style.display !== 'block', 'keypad submission prints no message box');
+
+  // 4c. levers: three wall levers whose arm sticks out of the wall and swings
+  //     up/down (target angle changes, arm settles after a few frames).
+  ok(levers.length === 3, '3 wall levers exist (' + levers.length + ')');
+  const tipY = lv => { const v = new THREE.Vector3(); lv.arm.getWorldPosition(v); return v.y + 0.52 * Math.cos(lv.arm.rotation.x); };
+  let leversOut = 0, leversUpDown = 0, leversSettle = 0;
+  for (const lv of levers) {
+    const it = interactables.find(t => t.kind === 'decoy' && t.mesh === lv.arm.children[1]);
+    // grip must sit on the room side of the wall, clear of the wall plane (world space)
+    scene.updateMatrixWorld(true);
+    const gw = new THREE.Vector3(); it.mesh.getWorldPosition(gw);
+    // the grip must project clear of the wall surface, into the room
+    // (the arm is tipped up, so it is inward of the hinge in z but off the wall)
+    const gapToWall = (ROOM_D / 2 - WALL_T / 2) - Math.abs(gw.z);
+    if (gapToWall > 0.3) leversOut++;
+    // reset to the "up" state, settle it, confirm the tip is physically above the pivot
+    lv.st.on = false; lv.st.target = lv.UP; lv.arm.rotation.x = lv.UP * lv.zDir;
+    scene.updateMatrixWorld(true);
+    const yUp = tipY(lv);
+    it.action();                                    // pull: target flips to DOWN
+    if (lv.st.target !== lv.UP) { /* expected */ }
+    for (let f = 0; f < 60; f++) { const w = lv.st.target * lv.zDir; lv.arm.rotation.x += (w - lv.arm.rotation.x) * Math.min(1, 0.016 * 14); }
+    scene.updateMatrixWorld(true);
+    const yDown = tipY(lv);
+    if (yUp < yDown + 0.2) leversUpDown++;
+    if (Math.abs(lv.arm.rotation.x - lv.st.target * lv.zDir) < 1e-6) leversSettle++;
+    it.action();                                    // back up again
+    for (let f = 0; f < 60; f++) { const w = lv.st.target * lv.zDir; lv.arm.rotation.x += (w - lv.arm.rotation.x) * Math.min(1, 0.016 * 14); }
+  }
+  ok(leversOut === 3, 'all 3 lever grips stick out of the wall into the room (' + leversOut + ')');
+  ok(leversUpDown === 3, 'all 3 levers move from up to down when pulled (' + leversUpDown + ')');
+  ok(leversSettle === 3, 'all 3 lever arms settle exactly on their target angle (' + leversSettle + ')');
+  const north = levers.find(l => l.zDir === 1), south = levers.find(l => l.zDir === -1);
+  ok(north.arm.rotation.x * 1 < 0 && south.arm.rotation.x * -1 < 0, 'north and south levers rest tipped UP in world space');
+
+  ok(decoyErr === 0, 'all room-1 decoys respond to E with no errors');
+
+  // 4d. GEOMETRY: every decoy must protrude into the ROOM, never into its wall.
+  // A gadget sunk into a wall is invisible, so for each decoy we check that the
+  // part the player actually aims at sits on the room side of the wall plane.
+  scene.updateMatrixWorld(true);
+  const wallPlaneZ = ROOM_D / 2;          // both north and south wall faces
+  let intoRoom = 0, intoWall = 0, detail = [];
+  for (const t of interactables.filter(t => t.kind === 'decoy' && inR1(t))) {
+    const w = new THREE.Vector3(); t.mesh.getWorldPosition(w);
+    // distance past the wall face, signed toward the room the gadget is mounted in
+    const side = w.z < 0 ? 1 : -1;       // north-wall gadget (z<0) points toward +z
+    const past = side * (w.z + side * wallPlaneZ);
+    if (past < 0.06) intoWall++;
+    else intoRoom++;
+    detail.push(t.prompt().replace(/\[E\] /, '') + '=' + past.toFixed(2));
+  }
+  ok(intoWall === 0, 'no decoy is buried in its wall (' + intoWall + ' buried, ' + intoRoom + ' clear)');
+  ok(intoRoom >= 14, 'all ' + intoRoom + ' room-1 decoys sit proud of the wall');
+  ok(detail.length >= 14, 'checked ' + detail.length + ' gadgets: ' + detail.slice(0, 4).join(' '));
+
+  // 4e. the mounting hardware is no longer near-black (the old "black squares").
+  // Only GADGET-sized boxes count: the room's own dark-navy walls are legitimately
+  // dark (0x1c2636 reads as near-black in three.js's linear working space) and
+  // are room structure, not a plate covering a button.
+  let darkHousings = 0, housingNames = [];
+  scene.traverse(o => {
+    if (!o.isMesh || !o.material || !o.material.color) return;
+    const c = o.material.color, p = o.getWorldPosition(new THREE.Vector3());
+    if (Math.abs(p.x - LEVELS[0].cx) > ROOM_W / 2) return;
+    if (o.geometry.type !== 'BoxGeometry') return;
+    const g = o.geometry.parameters;
+    if (g.width > 1.5 || g.height > 1.5) return;   // skip walls/floors/door slabs
+    const luma = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    if (Math.abs(Math.abs(p.z) - wallPlaneZ) < 0.25 && p.y > 1.0 && p.y < 2.1 && luma < 0.08) {
+      darkHousings++; housingNames.push('x' + p.x.toFixed(1) + ' ' + g.width + 'x' + g.height);
+    }
+  });
+  ok(darkHousings === 0, 'no near-black plates covering buttons/dials/sliders (' + darkHousings + ') ' + housingNames.join(','));
+
+  // 4f. decoy reactions are purely visual: no message box, no text, no puzzle state.
+  elMsg.style.display = 'none';
+  const doorStatesBefore = state.doorsOpen.size, lockStatesBefore = Object.keys(state.locks).length;
+  for (const t of interactables.filter(t => t.kind === 'decoy' && inR1(t))) {
+    try { if (!inv.open && pad === null) t.action(); } catch (e) {}
+  }
+  ok(elMsg.style.display === 'none', 'pressing every decoy prints no speech/message box');
+  ok(document.querySelectorAll('#msg').length === 1 && elMsg.textContent === '', 'the speech box stays empty');
+  ok(state.doorsOpen.size === doorStatesBefore && Object.keys(state.locks).length === lockStatesBefore,
+     'decoys change no game state (no door opened, no lock created)');
+  if (pad) { padPress('CLEAR'); padKey({ code: 'Enter', preventDefault(){} }); }
+
+  // 4g. IDENTIFY any near-black flush box, so 4e cannot silently pass by
+  //     flagging the room walls instead of an actual gadget housing.
+  const darkBoxes = [];
+  scene.traverse(o => {
+    if (!o.isMesh || !o.material || !o.material.color || !o.geometry || o.geometry.type !== 'BoxGeometry') return;
+    const c = o.material.color, p = o.getWorldPosition(new THREE.Vector3());
+    if (Math.abs(p.x - LEVELS[0].cx) > ROOM_W / 2) return;
+    const luma = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    if (Math.abs(Math.abs(p.z) - wallPlaneZ) < 0.25 && p.y > 1.0 && p.y < 2.1 && luma < 0.08) {
+      const s = o.geometry.parameters;
+      darkBoxes.push(s.width + 'x' + s.height + 'x' + s.depth + ' hex' + c.getHexString() + ' luma' + luma.toFixed(3));
+    }
+  });
+  // Any dark box here must be room architecture (a full-width wall), never a small plate.
+  const onlyWalls = darkBoxes.length > 0 && darkBoxes.every(b => parseFloat(b.split('x')[0]) > ROOM_W);
+  ok(onlyWalls, 'dark boxes at the wall plane are only the walls themselves, no plates: ' + JSON.stringify(darkBoxes));
+
+  // 5. the hidden key
+  const key1 = interactables.find(t => t.kind === 'key' && t.keyId === 'key1');
+  const km = key1.mesh;
+  ok(km.scale.x < 0.5, 'Key 1 is tiny (scale ' + km.scale.x + ')');
+  ok(km.position.y < 0.4, 'Key 1 lies on the floor (y ' + km.position.y + ')');
+  ok(km.position.x > LEVELS[0].cx + 3 && km.position.z < -2.5, 'Key 1 sits in the NE corner');
+
+  // 5b. the key is a REAL key mesh (shaft + bow + 2 teeth) and lies FLAT on the
+  //     surface, instead of standing on end / clipping through the floor.
+  const keyParts = km.children.filter(c => c.userData && c.userData.hitProxy ? false : true);
+  ok(keyParts.length === 4, 'key mesh is shaft + bow + 2 teeth (4 parts, got ' + keyParts.length + ')');
+  ok(Math.abs(km.rotation.x + Math.PI / 2) < 1e-6, 'key lies flat (rotation.x = -PI/2)');
+  ok(Math.abs(km.position.y - km.userData.restY) < 1e-6,
+     'key rests ON the surface (y ' + km.position.y.toFixed(3) + ' = restY ' + km.userData.restY.toFixed(3) + ')');
+  const proxy = km.children.find(c => c.userData && c.userData.hitProxy);
+  ok(!!proxy && proxy.material.visible === false, 'key has an invisible-but-raycastable hit proxy');
+  ok(!!proxy && proxy.geometry.type === 'SphereGeometry', 'hit proxy is a sphere (forgiving aim target)');
+
+  // 5c. keys are only visible when you are CLOSE **and** LOOKING at them.
+  // Keys rest on the floor / a table, so aiming at one means looking DOWN at it:
+  // this helper solves both yaw and pitch for a real world-space target.
+  const lookAtTarget = (px, pz, t) => {
+    // Accept either a THREE.Object3D (its position lives on .position) or a plain
+    // {x,y,z}. Reading t.x straight off a Group gives undefined -> NaN angles, so
+    // the camera would never actually be aiming at the target.
+    const P = (t && t.isObject3D) ? t.getWorldPosition(new THREE.Vector3()) : t;
+    player.x = px; player.z = pz;
+    const dx = P.x - px, dy = P.y - 1.65, dz = P.z - pz;
+    player.yaw = Math.atan2(-dx, -dz);
+    player.pitch = Math.atan2(dy, Math.hypot(dx, dz));
+    camera.position.set(px, 1.65, pz);
+    camera.rotation.order = 'YXZ';
+    camera.rotation.set(player.pitch, player.yaw, 0);
+    camera.updateMatrixWorld(true);
+  };
+  // lookAway: stand at (px,pz) with your eyes pointed AWAY from t (not merely
+  // level). In this game yaw = atan2(-dx, -dz) faces a target, so the opposite
+  // direction is that plus PI. Getting this backwards made "looking away" pass
+  // only by accident, via the key's downward angle rather than the yaw.
+  const lookAway = (px, pz, t) => {
+    const P = (t && t.isObject3D) ? t.getWorldPosition(new THREE.Vector3()) : t;
+    player.x = px; player.z = pz;
+    player.yaw = Math.atan2(-(P.x - px), -(P.z - pz)) + Math.PI;   // face directly away
+    player.pitch = 0;
+    camera.position.set(px, 1.65, pz);
+    camera.rotation.order = 'YXZ'; camera.rotation.set(0, player.yaw, 0);
+    camera.updateMatrixWorld(true);
+  };
+  const kx = km.position.x, ky = km.position.y, kz = km.position.z;
+  // far away, even aimed straight at it -> hidden
+  lookAtTarget(kx, kz + 6, km);
+  updateKeyVisibility();
+  ok(km.visible === false, 'key hidden from 6 units away even when aimed at');
+  // close but looking the other way -> hidden
+  lookAway(kx, kz + 1.5, km);
+  updateKeyVisibility();
+  ok(km.visible === false, 'key hidden when close but looking AWAY (not aimed at)');
+  // close and looking down at it -> visible
+  lookAtTarget(kx, kz + 1.5, km);
+  updateKeyVisibility();
+  ok(km.visible === true, 'key visible when close AND looking directly at it');
+  // just past the distance limit -> hidden again
+  lookAtTarget(kx, kz + KEY_SEE_DIST + 0.6, km);
+  updateKeyVisibility();
+  ok(km.visible === false, 'key hidden again just beyond the close range');
+  ok(KEY_SEE_ANGLE < 0.9, 'view cone is tight (' + (KEY_SEE_ANGLE * 180 / Math.PI).toFixed(0) + ' deg half-angle)');
+  ok(key1.aimOnly === true, 'key is aim-only: proximity alone cannot select it');
+  // proximity fallback must NOT grab a key you are not looking at
+  lookAway(kx, kz + 1.0, km);
+  ok(nearest() === null || nearest() !== key1, 'standing next to a key does not select it by proximity');
+  ok(target() !== key1, 'facing away: key is NOT the interaction target');
+  // aim from close range and it becomes the target. The real game calls
+  // updateKeyVisibility() every frame in tick(), so the test must too before
+  // asking target() — otherwise the key is still flagged hidden and is skipped.
+  lookAtTarget(kx, kz + 1.5, km);
+  updateKeyVisibility();
+  ok(target() === key1, 'looking at the key makes it the interaction target');
+  lookAtTarget(kx, kz + 0.8, km);
+  updateKeyVisibility();
+  ok(target() === key1, 'aim works even from arm\'s length');
+  // nearest() may legitimately return some other in-range thing (a decoy), so
+  // assert the real intent: proximity must never hand back the key itself.
+  ok(nearest() !== key1 && target() === key1, 'key selected ONLY by aim, never by proximity');
+  // a key on a table in another room behaves the same way.
+  // (key3, not key2 — room 2 is the riddle room and no longer has a key.)
+  const key3 = interactables.find(t => t.kind === 'key' && t.keyId === 'key3');
+  const k2 = key3.mesh;
+  lookAtTarget(k2.position.x, k2.position.z + 1.4, k2);
+  updateKeyVisibility();
+  ok(k2.visible === true, 'table key is visible when close and looked at');
+  lookAway(k2.position.x, k2.position.z + 1.4, k2);
+  updateKeyVisibility();
+  ok(k2.visible === false, 'table key hidden when not looked at');
+  lookAtTarget(k2.position.x, k2.position.z + 5, k2);
+  updateKeyVisibility();
+  ok(k2.visible === false, 'table key hidden from across the room');
+  // restore a neutral stance for the rest of the suite
+  lookAtTarget(LEVELS[0].cx - 2.5, 0, { x: LEVELS[0].cx + 4, y: 1.65, z: 0 });
+  updateKeyVisibility();
+
+  const junk = interactables.filter(t => t.kind === 'pickup' && /^junk_/.test(t.keyId));
+  ok(junk.length === 6, '6 do-nothing junk items in room 1 (' + junk.length + ')');
+  junk[0].action();
+  ok(inv.slots.some(s => s && s.id === 'junk_mug'), 'junk item can be picked up into inventory');
+
+  // 6. inventory rearrange (click slot -> click slot = swap)
+  const before = inv.slots.map(s => s && s.id);
+  const hb = document.querySelectorAll('#hotbar .slot');
+  hb[0].click(); hb[4].click();
+  const after = inv.slots.map(s => s && s.id);
+  ok(after[0] === before[4] && after[4] === before[0], 'slots swap on click-click rearrange');
+  ok(inv.slots.filter(Boolean).length === before.filter(Boolean).length, 'no items lost on swap');
+
+
+  // 7. doors need their exact key, then eat it
+  const doorOf = d => interactables.find(t => t.kind === 'door' && t.doorIdx === d);
+  doorOf(0).action();
+  ok(state.doorsOpen.size === 0, 'door stays locked without the key');
+  key1.action();                     // the REAL pickup path, not a test shortcut
+  ok(inv.slots.some(s => s && s.id === 'key1'), 'Key 1 picked up into the inventory');
+  doorOf(0).action();
+  ok(state.doorsOpen.has(0), 'Key 1 opens Door 1');
+  ok(!inv.slots.some(s => s && s.id === 'key1'), 'Key 1 is consumed by the door');
+
+  // 8. collision
+  const dx = LEVELS[0].cx + ROOM_W / 2;
+  ok(!hitsWall(LEVELS[0].cx, 0), 'open floor is walkable');
+  ok(hitsWall(LEVELS[0].cx, -ROOM_D / 2 + 0.4), 'north wall blocks movement');
+  ok(hitsWall(LEVELS[0].cx - hw, 0) === true, 'room 1 west wall is solid (no way back out)');
+  ok(!hitsWall(dx, 0), 'Door 1 doorway is walkable once unlocked');
+  ok(hitsWall(LEVELS[1].cx + ROOM_W / 2, 0), 'Door 2 doorway still blocks (locked)');
+
+  // 9. camera-relative movement matches the camera direction at any yaw
+  let moveErr = 0;
+  const dir = new THREE.Vector3();
+  for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2, 1.1]) {
+    camera.rotation.order = 'YXZ'; camera.rotation.y = yaw; camera.rotation.x = 0;
+    camera.getWorldDirection(dir);
+    const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+    const rx = Math.cos(yaw), rz = -Math.sin(yaw);
+    if (Math.abs(dir.x - fx) > 0.01 || Math.abs(dir.z - fz) > 0.01) moveErr++;
+    if (Math.abs(dir.x * rx + dir.z * rz) > 0.01) moveErr++;
+  }
+  ok(moveErr === 0, 'WASD forward = look direction and D = screen-right at every yaw');
+
+  // 10. ball throw + physics + re-pickup
+  const ballIt = interactables.find(t => t.kind === 'pickup' && t.keyId === 'ball');
+  ballIt.action();                                  // pick the ball up for real
+  const ballSlots = inv.slots.filter(s => s && s.id === 'ball').length;
+  ok(ballSlots === 1, 'exactly one throwable ball exists (' + ballSlots + ')');
+  inv.sel = inv.slots.findIndex(s => s && s.id === 'ball');
+  ball.held = true;
+  doThrowHeld();
+  ok(ball.thrown === true, 'E while holding the ball throws it');
+
+  // 11b. dropping a KEY rebuilds a real key lying flat on the floor (it used to
+  //      fall through to a grey rock because the inventory copy had no `mesh`).
+  giveItem({ id: 'key7', label: 'Key 7', icon: 'K7', mesh: 'key', color: 0xffd75e, scale: 1 });
+  inv.sel = inv.slots.findIndex(s => s && s.id === 'key7');
+  ok(inv.sel >= 0 && inv.slots[inv.sel].mesh === 'key', 'inventory key copy carries mesh=key (so a drop rebuilds a key)');
+  const pkBefore = pickups.length;
+  dropSelected();
+  ok(pickups.length === pkBefore + 1, 'dropped key lands in the world');
+  const dk = pickups[pickups.length - 1];
+  const dkParts = dk.mesh.children.filter(c => !(c.userData && c.userData.hitProxy));
+  ok(dkParts.length === 4, 'dropped key is a real key mesh (shaft+bow+2 teeth), not a rock (' + dkParts.length + ' parts)');
+  ok(dk.item.id === 'key7', 'dropped key keeps its identity');
+  ok(Math.abs(dk.mesh.rotation.x + Math.PI / 2) < 1e-6, 'dropped key lies flat');
+  ok(Math.abs(dk.mesh.position.y - dk.mesh.userData.restY) < 1e-6,
+     'dropped key rests on the floor (y ' + dk.mesh.position.y.toFixed(3) + ')');
+  ok(dk.mesh.visible === false, 'dropped key starts hidden until you look at it');
+  const dkx = dk.mesh.position.x, dkz = dk.mesh.position.z;
+  lookAway(dkx, dkz + 1.2, dk.mesh);          // same spot, eyes off the key
+  updateKeyVisibility();
+  ok(dk.mesh.visible === false, 'dropped key hidden when you look the wrong way');
+  lookAtTarget(dkx, dkz + 1.2, dk.mesh); // now actually look down at it
+  updateKeyVisibility();
+  ok(dk.mesh.visible === true, 'dropped key visible when you look at it');
+  lookAtTarget(dkx, dkz + 6, dk.mesh);
+  updateKeyVisibility();
+  ok(dk.mesh.visible === false, 'dropped key hidden from across the room');
+  lookAtTarget(dkx, dkz + 1.2, dk.mesh);
+  // pick it back up through the real aim+interact path
+  const dkIt = interactables.find(t => t.mesh === dk.mesh);
+  ok(!!dkIt && dkIt.aimOnly === true, 'dropped key is aim-only too');
+  updateKeyVisibility();
+  // --- diagnostics for the aim path (kept: cheap, and pinpoints failures) ---
+  {
+    const list = interactables.filter(eligible);
+    camera.updateMatrixWorld(true);
+    aimRay.setFromCamera(AIM_CENTER, camera); aimRay.far = 8;
+    const hits = aimRay.intersectObjects(list.map(it => it.mesh), true);
+    const owner = new Map(); for (const it of list) owner.set(it.mesh, it);
+    const named = hits.slice(0, 3).map(h => {
+      let o = h.object, kind = 'foreign';
+      while (o && !owner.has(o)) o = o.parent;
+      if (o) { const it = owner.get(o); kind = it.kind + ':' + (it.keyId || it.doorIdx != null ? it.keyId || 'door' + it.doorIdx : '?'); }
+      return kind + '@' + h.distance.toFixed(2);
+    });
+    const a = aimed(list);
+    const dp = worldPos(dk.mesh);
+    const d2 = Math.hypot(dp.x - player.x, dp.z - player.z);
+    const aOk = a && a.mesh === dk.mesh;
+    ok(aOk, 'DIAG aimed=drops=' + !!a + ' aimDist=' + d2.toFixed(2) + '/' + (dkIt ? dkIt.radius : '?') +
+       ' visible=' + dk.mesh.visible + ' proxyHit=' + named.join(' '));
+  }
+  doInteract();
+  ok(inv.slots.some(s => s && s.id === 'key7'), 'aimed dropped key can be picked back up with E');
+  // tidy: drop it again out of the way is unnecessary; just clear the slot
+  const ki7 = inv.slots.findIndex(s => s && s.id === 'key7');
+  if (ki7 >= 0) { inv.slots.splice(ki7, 1); inv.slots.push(null); renderInv(); }
+
+  ok(!inv.slots.some(s => s && s.id === 'ball'), 'thrown ball leaves the inventory');
+  let steps = 0;
+  while (ball.thrown && steps < 2000) { stepBall(1 / 60); steps++; }
+  ok(!ball.thrown, 'ball lands and settles (' + steps + ' frames, ' + ball.hits + ' prop bounces)');
+  ok(pickups.some(p => p.item.id === 'ball'), 'landed ball becomes a pickup again');
+  ok(pickups.every(p => isFinite(p.mesh.position.x) && isFinite(p.mesh.position.z)), 'no NaN ball position');
+
+  // 11. drop feature
+  giveItem({ id: 'junk_duck', label: 'Rubber Duck', icon: 'D', mesh: 'junk' });
+  inv.sel = inv.slots.findIndex(s => s && s.id === 'junk_duck');
+  const beforeDrop = pickups.length;
+  dropSelected();
+  ok(pickups.length === beforeDrop + 1, 'G drops the held item on the floor');
+  ok(!inv.slots.some(s => s && s.id === 'junk_duck'), 'dropped item leaves the inventory');
+
+  // 11b. ROOM 2 = riddle room: no table, no key, riddle sign with 4 colour lines,
+  //      and the east door takes the code 5414 on the in-game keypad.
+  const r2lo = LEVELS[1].cx - ROOM_W / 2, r2hi = LEVELS[1].cx + ROOM_W / 2;
+  const inR2 = t => t.mesh.position.x >= r2lo && t.mesh.position.x <= r2hi;
+  ok(!!LEVELS[1].riddleSign, 'room 2 is flagged riddleSign (suppresses the "Room 2" banner)');
+  ok(!interactables.some(t => t.kind === 'key' && inR2(t)), 'room 2 has NO key');
+  const r2keys = pickups.filter(p => p.mesh.position.x >= r2lo && p.mesh.position.x <= r2hi);
+  ok(r2keys.length === 0, 'room 2 has no floor pickups either (table and key removed)');
+  // no table: the table top is 1.8 x 1.0 at y 0.85, so look for a collider there
+  const r2cx = LEVELS[1].cx;
+  const tableLike = colliders.filter(c => c.maxX - c.minX > 1.4 && c.minX > r2cx - 2 && c.maxX < r2cx + 2 && c.minZ < 0 && c.maxZ > -1);
+  ok(tableLike.length === 0, 'room 2 has no table collider');
+  // the riddle sign: 8 lines, the 4 clue lines painted in their own colours
+  const sign = scene.children.find(m => m.userData && m.userData.signLines &&
+    m.position.x === r2cx && m.position.z < -2);
+  ok(!!sign, 'riddle sign is on room 2 north wall');
+  const sl = sign ? sign.userData.signLines : [];
+  ok(sl.length === 8, 'riddle sign has 8 lines (' + sl.length + ')');
+  const clues = sl.slice(4);
+  ok(clues.length === 4, 'riddle has 4 colour clue lines');
+  const want = ['#ff5a5a', '#ffd75e', '#5aff8a', '#6db3ff'];
+  ok(clues.every((c, i) => c.color.toLowerCase() === want[i]), 'clue lines are red, yellow, green, blue in order');
+  ok(clues.every(c => !!c.dot), 'each clue line has a painted colour dot');
+  ok(sl.slice(0, 4).every(c => c.color === '#e8d9b0'), 'the 4 instruction lines are neutral parchment');
+  ok(clues.map(c => c.text).join(' ').indexOf('Silent Owl Watches From Above') >= 0 &&
+     clues.map(c => c.text).join(' ').indexOf('Shadows Dance Quietly') >= 0 &&
+     clues.map(c => c.text).join(' ').indexOf('Raven') >= 0 &&
+     clues.map(c => c.text).join(' ').indexOf('Keys Hide Behind Curtains') >= 0, 'all 4 clues present with their CAPITALS');
+  // the door: a code door, not a key door
+  const d2 = doorOf(1);
+  ok(d2.prompt().indexOf('code') >= 0, 'room 2 door prompt asks for a code (not a key): "' + d2.prompt() + '"');
+  ok(DOOR_PASSWORDS[1] === '5414', 'room 2 door password is 5414');
+  d2.action();
+  ok(!!pad && padEl.title.textContent.indexOf('Door 2') >= 0,
+     'E on room 2 door opens the in-game keypad, no browser popup ("' + padEl.title.textContent + '")');
+  for (const ch of '0000') padPress(ch === '0' ? '0' : ch);
+  padBack(); padBack(); padBack(); padBack();                  // back to 0000
+  for (const ch of '1234') padPress(ch);
+  padSubmit();                                                 // WRONG code first
+  ok(!state.doorsOpen.has(1), 'a wrong code does NOT open the room 2 door');
+  ok(hitsWall(LEVELS[1].cx + ROOM_W / 2, 0), 'room 2 door still blocks after a wrong code');
+  d2.action();
+  for (const ch of '5414') padPress(ch);
+  padSubmit();
+  ok(state.doorsOpen.has(1), 'the correct code 5414 opens the room 2 door');
+  ok(!hitsWall(LEVELS[1].cx + ROOM_W / 2, 0), 'room 2 doorway is walkable after the code');
+
+  // 12. full playthrough: chained keys + the room-2 code door -> win
+  //     door 1 was already solved by the code above, so only re-affirm it.
+  for (let d = 0; d < 12; d++) {
+    if (d === 1) { ok(state.doorsOpen.has(1), 'room 2 code door stays open for the rest of the run'); continue; }
+    doorOf(d).action();                                        // locked until solved
+    const ki = interactables.find(t => t.kind === 'key' && t.keyId === 'key' + (d + 1));
+    if (ki) ki.action();                                       // real pickup from its room
+    doorOf(d).action();
+  }
+  ok(state.doorsOpen.size === 12, 'all 12 doors opened (11 keys + 1 code) (' + state.doorsOpen.size + ')');
+  ok(!inv.slots.some(s => s && s.id && s.id.startsWith('key')), 'every key consumed by its door');
+  const exitIt = interactables.find(t => t.kind === 'exit');
+  ok(exitIt.prompt().indexOf('Escape') >= 0, 'EXIT unlocks only after all doors');
+  exitIt.action();
+  ok(state.won === true, 'walking through EXIT wins the game');
+  ok(document.getElementById('win').classList.contains('show'), 'win overlay shown');
+  ok(!hitsWall(lastRoom.cx + ROOM_W / 2, 0), 'EXIT doorway is walkable');
+  ok(hitsWall(LEVELS[3].cx + ROOM_W / 2, 0) === false, 'mid-game door stays open once used');
+
+  // 13. HUD wiring
+  ok(document.querySelectorAll('#hotbar .slot').length === 9, 'hotbar renders 9 slots');
+  ok(document.querySelectorAll('#invGrid .cell').length === 36, 'inventory panel renders 36 slots');
+  ok(!!document.getElementById('dropBtn'), 'Drop (G) button exists');
+  toggleInv(true);
+  ok(document.getElementById('invPanel').classList.contains('show'), 'Q opens the inventory panel');
+  toggleInv(false);
+  ok(!document.getElementById('invPanel').classList.contains('show'), 'Q closes the inventory panel');
+  inv.sel = 8; renderInv();
+  ok(document.querySelector('#hotbar .slot.sel').dataset.idx === '8', '1-9 keys select hotbar slots');
+  ok(shortLabel('Key 7') === 'K7' && needLabel('key7') === 'Key 7', 'inventory shows key labels (K7 / Key 7)');
+
+  // 14. aim-based targeting + crosshair (plain white dot, no outline)
+  const crossEl = document.getElementById('crosshair');
+  const promptEl = document.getElementById('prompt');
+  const crossStyle = getComputedStyle(crossEl);
+  ok(crossStyle.backgroundColor === 'rgba(255, 255, 255, 0.9)' && /^0px none /.test(crossStyle.border) && crossStyle.borderWidth === '0px' && crossStyle.borderRadius === '50%' && crossStyle.boxShadow.indexOf('0px 0px 3px') >= 0 && !/ring/i.test(crossStyle.outline || ''),
+     'crosshair is a plain white dot (no ring/outline): ' + crossStyle.backgroundColor + ' / shadow ' + crossStyle.boxShadow);
+  // stand 2m west of the EXIT (the last interactable door) and look straight at it
+  player.x = lastRoom.cx + ROOM_W / 2 - 2.0; player.z = 0;
+  player.yaw = -Math.PI / 2; player.pitch = 0;
+  camera.position.set(player.x, 1.65, player.z);
+  camera.rotation.order = 'YXZ';
+  camera.rotation.set(0, -Math.PI / 2, 0);
+  let aimTarget = target();
+  ok(aimTarget && aimTarget.kind === 'exit', 'crosshair ray targets the EXIT when aimed at it (' + (aimTarget ? aimTarget.kind : 'null') + ')');
+  updateHudPrompt();
+  ok(typeof outlineBox === 'undefined' && typeof setOutline === 'undefined', 'no outline helper / no wireframe hitbox in the scene');
+  ok(scene.children.every(c => !(c.isLineSegments || c.type === 'BoxHelper')), 'no wireframe helper meshes added to the scene');
+  ok(promptEl.textContent.indexOf('Escape') >= 0, 'prompt comes from the aimed object: "' + promptEl.textContent + '"');
+
+  // fallback: an item at your feet is targeted even when you aim at the wall
+  // (spawned in room 7 so that room 5 below stays genuinely empty)
+  spawnPickup({ id: 'ball_fb', label: 'Bouncy Ball', icon: '⚾', mesh: 'ball' }, LEVELS[6].cx, 3.0, { y: 0.3 });
+  player.x = LEVELS[6].cx; player.z = 3.0;
+  camera.position.set(player.x, 1.65, player.z);
+  player.yaw = Math.PI; player.pitch = 0;      // facing the empty south wall
+  camera.rotation.set(0, Math.PI, 0);
+  const fallback = target();
+  ok(fallback && fallback.keyId === 'ball_fb', 'proximity fallback: item at your feet wins when you aim at nothing (' + (fallback ? fallback.keyId : 'null') + ')');
+  const aimAtWall = aimed(interactables.filter(eligible));
+  ok(!aimAtWall, 'raycast hits nothing on a blank wall (' + (aimAtWall ? (aimAtWall.keyId || aimAtWall.kind) : 'null') + ')');
+  updateHudPrompt();
+  ok(crossEl.classList.contains('on') === false, 'crosshair gains no "on" state for the fallback target (always just a dot)');
+
+  // 15. no target + not holding the ball -> prompt hidden, ring off
+  player.x = LEVELS[4].cx; player.z = 2.0;     // nothing in range anywhere
+  camera.position.set(player.x, 1.65, player.z);
+  camera.rotation.set(0, Math.PI, 0);
+  inv.slots.fill(null); inv.sel = 0; renderInv();
+  const nothing = target();
+  ok(nothing === null, 'aiming at a blank wall in an empty room targets nothing (' + (nothing ? nothing.keyId || nothing.kind : 'null') + ')');
+  updateHudPrompt();
+  ok(promptEl.style.display === 'none', 'prompt hidden when there is no target and no ball');
+
+  // 15b. world objects sit still: no key/pickup rotation or bobbing over time.
+  // The playthrough above consumed every key, so spawn a fresh one to watch
+  // rather than hunting for a leftover that no longer exists.
+  const stillKey = spawnKey({ kd: { id: 'key_spin', label: 'Spin Probe', icon: 'S', room: 0 },
+                              x: LEVELS[0].cx, z: 0, y: 0, sign: false });
+  stillKey.visible = true;
+  const stillPickup = pickups.find(pk => pk.item.id === 'junk_rock');
+  const keyRot0 = stillKey ? stillKey.rotation.clone() : null;
+  const keyPos0 = stillKey ? stillKey.position.clone() : null;
+  const pkRot0 = stillPickup ? stillPickup.mesh.rotation.clone() : null;
+  const pkPos0 = stillPickup ? stillPickup.mesh.position.clone() : null;
+  for (let f = 0; f < 30; f++) stepBall(0.016);            // animate frames that used to spin/bob
+  ok(stillKey && keyRot0.equals(stillKey.rotation) && keyPos0.equals(stillKey.position), 'keys do not spin or move');
+  ok(stillPickup && pkRot0.equals(stillPickup.mesh.rotation) && pkPos0.equals(stillPickup.mesh.position), 'pickup items do not spin or bob');
+  ok(typeof keyMeshes === 'undefined', 'no separate key animation list remains');
+
+  // 16. holding the ball + no target -> small "Press E to throw" hint
+  giveItem({ id: 'ball', label: 'Bouncy Ball', icon: '⚾', mesh: 'ball' });
+  let bi = inv.slots.findIndex(s => s && s.id === 'ball');
+  if (bi > 8) { const tmp = inv.slots[bi]; inv.slots[bi] = inv.slots[0]; inv.slots[0] = tmp; bi = 0; }
+  inv.sel = bi; renderInv();
+  ball.thrown = false;
+  updateHudPrompt();
+  ok(promptEl.textContent === 'Press E to throw', 'throw hint shown while holding the ball: "' + promptEl.textContent + '"');
+  ok(promptEl.classList.contains('throw'), 'throw hint uses the orange .throw style');
+  ok(promptEl.style.display === 'block', 'throw hint is visible');
+  // aiming at an object while holding the ball shows the object prompt instead
+  player.x = lastRoom.cx + ROOM_W / 2 - 2.0; player.z = 0;
+  camera.position.set(player.x, 1.65, player.z);
+  camera.rotation.set(0, -Math.PI / 2, 0);
+  updateHudPrompt();
+  ok(promptEl.textContent.indexOf('Escape') >= 0 && !promptEl.classList.contains('throw'),
+     'aiming at an object hides the throw hint (' + promptEl.textContent + ')');
+  // and with the inventory open the hint stays quiet
+  player.x = LEVELS[4].cx; player.z = 2.0;
+  camera.position.set(player.x, 1.65, player.z);
+  camera.rotation.set(0, Math.PI, 0);
+  inv.open = true; updateHudPrompt();
+  ok(promptEl.style.display === 'none', 'no throw hint while the inventory panel is open');
+  inv.open = false;
+} catch (err) {
+  R.push('FAIL: EXCEPTION ' + (err && err.stack ? err.stack.substring(0, 300) : err));
+}
+const loadErr = (window.__loadErr || []).join(' ; ');
+if (loadErr) R.push('FAIL: LOAD ERROR ' + loadErr);
+const fails = R.filter(l => l.startsWith('FAIL')).length;
+R.push('SUMMARY: ' + (R.length - fails) + ' passed, ' + fails + ' failed');
+const out = document.createElement('pre');
+out.id = 'TESTOUT';
+out.textContent = R.join(String.fromCharCode(10));
+document.body.appendChild(out);
+
+
+
+</script>
+</body>
+</html>
