@@ -1,0 +1,21 @@
+{
+  "features": [
+    "box",
+    "rushers",
+    "down",
+    "ydstogo",
+    "yardline_100",
+    "shotgun",
+    "is_motion",
+    "is_play_action",
+    "blitz"
+  ],
+  "classes": [
+    "Cover-0",
+    "Cover-1",
+    "Cover-2",
+    "Cover-3",
+    "Goal-line",
+    "Quarters"
+  ]
+}
